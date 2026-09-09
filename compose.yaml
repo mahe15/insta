@@ -1,0 +1,24 @@
+services:
+  cliper:
+    build: .
+    restart: unless-stopped
+    init: true
+    env_file: .env
+    environment:
+      DATA_DIR: /app/data
+      FFMPEG_PATH: /usr/bin/ffmpeg
+      # This image is CPU-only; the Windows local setup uses the RTX 4060.
+      WHISPER_DEVICE: cpu
+      WHISPER_COMPUTE_TYPE: int8
+      VIDEO_ENCODER: libx264
+    volumes:
+      - cliper-data:/app/data
+    stop_grace_period: 45s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+volumes:
+  cliper-data:

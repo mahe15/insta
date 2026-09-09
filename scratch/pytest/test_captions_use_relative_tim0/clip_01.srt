@@ -1,0 +1,23 @@
+1
+00:00:00,000 --> 00:00:02,286
+I tried building everything
+
+2
+00:00:02,286 --> 00:00:04,000
+before testing demand.
+
+3
+00:00:05,000 --> 00:00:07,667
+One conversation changed the
+
+4
+00:00:07,667 --> 00:00:09,000
+entire plan.
+
+5
+00:00:10,000 --> 00:00:12,500
+Now I test the smallest
+
+6
+00:00:12,500 --> 00:00:14,000
+useful idea first.

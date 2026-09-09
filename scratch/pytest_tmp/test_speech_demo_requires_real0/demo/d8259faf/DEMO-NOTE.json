@@ -1,0 +1,9 @@
+{
+  "synthetic": false,
+  "visuals": "Designed studio title card",
+  "audio": "User supplied recording",
+  "transcript": "Real Whisper transcription; see transcript.runtime.json for device",
+  "ranking": "Offline heuristic, not a virality benchmark",
+  "encoder": "h264_nvenc",
+  "purpose": "Spoken demo using the production transcription, caption and export pipeline"
+}

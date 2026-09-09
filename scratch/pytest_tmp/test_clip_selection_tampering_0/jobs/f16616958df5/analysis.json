@@ -1,0 +1,27 @@
+{
+  "title": "test",
+  "language": "en",
+  "duration": 40.0,
+  "method": "test",
+  "model": null,
+  "clips": [
+    {
+      "id": 1,
+      "start": 0.0,
+      "end": 19.0,
+      "title": "Test demand before building",
+      "reason": "Complete useful lesson",
+      "hook_text": "Why did my first project fail?",
+      "score": 80,
+      "ratings": {
+        "hook": 80,
+        "payoff": 75,
+        "standalone": 90,
+        "emotion": 60,
+        "usefulness": 85
+      },
+      "text": "A complete useful lesson with a clear opening and payoff.",
+      "selection_method": "test"
+    }
+  ]
+}

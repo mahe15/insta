@@ -1,0 +1,37 @@
+{
+  "clip": {
+    "id": 1,
+    "start": 0.0,
+    "end": 2.5,
+    "title": "Test demand before building",
+    "reason": "Complete useful lesson",
+    "hook_text": "Why did my first project fail?",
+    "score": 80,
+    "ratings": {
+      "hook": 80,
+      "payoff": 75,
+      "standalone": 90,
+      "emotion": 60,
+      "usefulness": 85
+    },
+    "text": "A complete useful lesson with a clear opening and payoff.",
+    "selection_method": "test"
+  },
+  "render": {
+    "layout": "blur",
+    "captions": true,
+    "style": "studio",
+    "encoder": "libx264"
+  },
+  "quality": {
+    "width": 360,
+    "height": 640,
+    "duration": 2.5,
+    "audio": true,
+    "bytes": 221622,
+    "full_decode": "passed",
+    "audio_level": "passed"
+  },
+  "vision": {},
+  "review_note": "Automated technical QA; editorial and face visibility review advised."
+}
