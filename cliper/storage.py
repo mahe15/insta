@@ -84,8 +84,8 @@ class Store:
     def claim(self) -> dict | None:
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
-            row = db.execute("SELECT * FROM jobs WHERE state IN ('queued_analysis','queued_render') "
-                             "ORDER BY updated LIMIT 1").fetchone()
+            rows = db.execute("SELECT * FROM jobs WHERE state IN ('queued_analysis','queued_render') ORDER BY updated").fetchall()
+            row = next((r for r in rows if self.prefs(r["owner"]).f1_enabled), None)
             if not row:
                 return None
             state = "analyzing" if row["state"] == "queued_analysis" else "rendering"

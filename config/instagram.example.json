@@ -1,0 +1,8 @@
+{
+  "clips": {"ig_user_id": "", "token_env": "IG_CLIPS_TOKEN", "login": "instagram", "owners": []},
+  "dark": {"ig_user_id": "", "token_env": "IG_DARK_TOKEN", "login": "instagram", "owners": []},
+  "men": {"ig_user_id": "", "token_env": "IG_MEN_TOKEN", "login": "instagram", "owners": []},
+  "money": {"ig_user_id": "", "token_env": "IG_MONEY_TOKEN", "login": "instagram", "owners": []},
+  "tech": {"ig_user_id": "", "token_env": "IG_TECH_TOKEN", "login": "instagram", "owners": []},
+  "finance": {"ig_user_id": "", "token_env": "IG_FINANCE_TOKEN", "login": "instagram", "owners": []}
+}

@@ -12,4 +12,11 @@ __pycache__/
 build/
 dist/
 *.log
-
+config/instagram.json
+config/niches.json
+music/**/*.mp3
+music/**/*.wav
+music/**/*.m4a
+music/**/*.flac
+music/**/*.ogg
+music/**/*.aac

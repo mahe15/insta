@@ -109,9 +109,15 @@ async def transcribe(source: Path, directory: Path, prefs: Preferences, cfg: Con
 def filter_graph(prefs: Preferences, face: dict, subtitle: str, force_blur=False) -> tuple[str, str]:
     w, h = prefs.width, prefs.width * 16 // 9
     mode = prefs.reframe
-    if force_blur or (mode == "auto" and not face.get("safe_crop")):
+    if prefs.layout == "square_hook":
+        mode = "square_hook"
+        graph = (f"[0:v]scale={w}:{w}:force_original_aspect_ratio=increase,crop={w}:{w},"
+                 f"pad={w}:{h}:0:{(h - w) // 2}:color=black[framed];")
+    elif force_blur or (mode == "auto" and not face.get("safe_crop")):
         mode = "blur"
-    if mode == "blur":
+    if mode == "square_hook":
+        pass
+    elif mode == "blur":
         graph = (f"[0:v]split=2[bg][fg];[bg]scale={w}:{h}:force_original_aspect_ratio=increase,"
                  f"crop={w}:{h},boxblur=20:2,eq=brightness=-0.13[back];"
                  f"[fg]scale={w}:{h}:force_original_aspect_ratio=decrease[front];"
@@ -121,7 +127,7 @@ def filter_graph(prefs: Preferences, face: dict, subtitle: str, force_blur=False
         graph = (f"[0:v]scale={w}:{h}:force_original_aspect_ratio=increase,"
                  f"crop={w}:{h}:x='max(0,min(iw-ow,iw*({expression})-ow/2))':y=(ih-oh)/2[framed];")
     graph += "[framed]setsar=1,fps=30"
-    if prefs.captions:
+    if prefs.captions or prefs.layout == "square_hook":
         # Subtitle filename is generated internally, and cwd avoids Windows drive/path escaping.
         graph += f",ass=filename={subtitle}"
     graph += "[out]"
@@ -161,23 +167,43 @@ async def render(source: Path, directory: Path, transcript: Transcript, clip: Cl
     directory.mkdir(parents=True, exist_ok=True)
     ass = write_captions(directory, transcript, clip, prefs)
     face_path = directory / f"clip_{clip.id:02}.vision.json"
-    if prefs.reframe == "auto":
+    if prefs.reframe == "auto" and prefs.layout == "legacy":
         await run([sys.executable, "-m", "cliper.vision", str(source), str(clip.start), str(clip.end),
                    str(face_path)], cancelled=cancelled, timeout=300)
         face = json.loads(face_path.read_text(encoding="utf-8"))
     else:
         face = {}
     length = clip.end - clip.start
+    from .music import choose
+    track_note = directory / f"clip_{clip.id:02}.music.json"
+    track = None
+    if prefs.music:
+        if track_note.exists():
+            saved = json.loads(track_note.read_text("utf-8"))
+            candidate = Path(saved["path"]) if saved.get("path") else None
+            if candidate and candidate.is_file() and saved.get("category") == clip.music_category:
+                track = candidate
+        if track is None:
+            track = choose(cfg.music_dir, clip.music_category)
+        write_json(track_note, {"category": clip.music_category, "path": str(track) if track else None,
+                                "gain": 0.2, "status": "selected" if track else "category folder is empty"})
     # Limit peak video bitrate with ample mux/audio headroom for Telegram's cloud API.
     bitrate = min(6500, int((43_000_000 * 8 / length) / 1000) - 160)
     target = directory / f"clip_{clip.id:02}.mp4"
     partial = directory / f"clip_{clip.id:02}.partial.mp4"
     for attempt in range(2):
         graph, mode = filter_graph(prefs, face, ass.name, force_blur=bool(attempt))
+        audio_map = ["-map", "0:a:0", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11"]
+        if track:
+            graph += (";[0:a]loudnorm=I=-16:TP=-1.5:LRA=11[voice];"
+                      "[1:a]volume=0.20[music];[voice][music]amix=inputs=2:duration=first:"
+                      "dropout_transition=0:normalize=0,alimiter=limit=0.95:level=false[aout]")
+            audio_map = ["-map", "[aout]"]
         await run([cfg.ffmpeg(), "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
-                   "-ss", f"{clip.start:.3f}", "-i", str(source), "-t", f"{length:.3f}",
+                   "-ss", f"{clip.start:.3f}", "-i", str(source),
+                   *(["-stream_loop", "-1", "-i", str(track)] if track else []), "-t", f"{length:.3f}",
                    "-filter_complex_threads", "2", "-filter_complex", graph,
-                   "-map", "[out]", "-map", "0:a:0", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
+                   "-map", "[out]", *audio_map,
                    *video_encoder_args(cfg, bitrate),
                    "-maxrate", f"{bitrate}k", "-bufsize", f"{bitrate * 2}k",
                    "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
@@ -192,8 +218,9 @@ async def render(source: Path, directory: Path, transcript: Transcript, clip: Cl
             continue
         partial.replace(target)
         write_json(directory / f"clip_{clip.id:02}.json", {
-            "clip": clip.model_dump(), "render": {"layout": mode, "captions": prefs.captions,
+            "clip": clip.model_dump(), "preferences": prefs.model_dump(), "render": {"layout": mode, "captions": prefs.captions,
                                                  "style": prefs.style, "encoder": cfg.video_encoder}, "quality": qa,
+            "music": {"category": clip.music_category, "file": str(track) if track else None, "gain": .2},
             "vision": face, "review_note": "Automated technical QA; editorial and face visibility review advised."})
         return target
     raise ValueError("Could not produce a valid export")

@@ -64,6 +64,10 @@ class Controller:
         self.worker_task: asyncio.Task | None = None
         self.maintenance_task: asyncio.Task | None = None
         self.progress_messages: dict[str, tuple[int, float]] = {}
+        from cliper.controls import Controls
+        self.controls = Controls(self)
+        self.publisher_task = None
+        self.faceless_task = None
 
     def authorized(self, update: Update) -> bool:
         return bool(update.effective_user and update.effective_user.id in self.cfg.owners
@@ -116,6 +120,7 @@ class Controller:
         await self.app.bot.send_message(job["chat"], text, reply_markup=keyboard)
 
     async def deliver(self, job, clip, output: Path):
+        post = self.controls.clip_publication(job, clip, output)
         caption = f"🎬 {clip.title}\n\n{clip.score}/100 editorial score · {clip.end - clip.start:.0f}s\n"
         caption += f"{clip.reason}\n\nSource: {clip.start:.1f}–{clip.end:.1f}s · Job {job['id']}"
         for attempt in range(3):
@@ -123,7 +128,8 @@ class Controller:
                 with output.open("rb") as video:
                     await self.app.bot.send_video(job["chat"], video=video, caption=caption[:1024],
                                                   supports_streaming=True, read_timeout=180, write_timeout=180,
-                                                  connect_timeout=30, pool_timeout=30)
+                                                  connect_timeout=30, pool_timeout=30,
+                                                  reply_markup=self.controls.publication_buttons(post))
                 return
             except RetryAfter as exc:
                 if attempt == 2:
@@ -143,7 +149,30 @@ class Controller:
         args = context.args
         try:
             if name in {"start", "help"}:
-                reply = WELCOME
+                await self.controls.show(update.message, owner)
+                return
+            elif name in {"autopublish", "music", "feature"}:
+                p = self.store.prefs(owner)
+                if name == "feature":
+                    if not args or args[0].lower() not in {"f1", "f2", "both"}:
+                        raise ValueError("Use /feature f1, f2 or both; enable each feature with the dashboard buttons")
+                    mode = args[0].lower()
+                    p = p.model_copy(update={"active_feature": mode, "f1_enabled": mode in {"f1", "both"},
+                                            "f2_enabled": mode in {"f2", "both"}})
+                else:
+                    if not args or args[0].lower() not in {"on", "off"}:
+                        raise ValueError(f"Use /{name} on or off")
+                    key = "music" if name == "music" else ("f2_auto_publish" if len(args) > 1 and args[1].lower() == "f2" else "auto_publish")
+                    p = p.model_copy(update={key: args[0].lower() == "on"})
+                    if name == "autopublish" and args[0].lower() == "off":
+                        self.controls.publications.hold_auto(owner, "f2" if key == "f2_auto_publish" else "f1")
+                self.store.save_prefs(owner, p)
+                await self.controls.show(update.message, owner)
+                return
+            elif name in {"generate", "schedule"}:
+                from cliper.faceless import handle_command
+                await handle_command(self.controls, update, context, name)
+                return
             elif name == "jobs":
                 jobs = self.store.recent(owner)
                 reply = "\n\n".join(f"{j['id']} · {j['state']}\n{j['stage']}" for j in jobs) or "No jobs yet. Send a video link."
@@ -237,8 +266,34 @@ class Controller:
             elif name in {"status", "cancel", "retry", "render", "export"}:
                 if not args:
                     raise ValueError(f"Use /{name} JOB_ID. Find the ID with /jobs.")
-                job = self.store.get(args[0], owner)
-                directory = self.store.directory(job["id"])
+                try:
+                    job = self.store.get(args[0], owner)
+                    is_f2 = False
+                except Exception:
+                    from .faceless import FacelessStore
+                    f2_store = FacelessStore(self.store)
+                    try:
+                        job = f2_store.get(args[0], owner)
+                        is_f2 = True
+                    except Exception:
+                        raise ValueError(f"Job {args[0]} not found")
+                if is_f2:
+                    if name == "retry":
+                        if job["state"] != "failed":
+                            raise ValueError("Only failed carousel jobs can be retried")
+                        f2_store.update(job["id"], state="queued", error="")
+                        reply = f"F2 job {job['id']} queued for retry."
+                    elif name == "status":
+                        reply = f"F2 · {job['id']} · {job['state']}\nNiche: {job['niche']}\n{job['stage']}"
+                        if job.get("error"):
+                            reply += "\n" + job["error"][:900]
+                    elif name == "cancel":
+                        f2_store.cancel(job["id"], owner)
+                        reply = f"F2 job {job['id']} cancelled."
+                    else:
+                        raise ValueError(f"/{name} is not applicable to carousel jobs")
+                else:
+                    directory = self.store.directory(job["id"])
                 if name == "status":
                     if job["state"] == "awaiting_selection":
                         await self.shortlist(job, Analysis.model_validate_json(
@@ -330,6 +385,8 @@ class Controller:
                 raise ValueError('Transcription is not installed. Run: pip install -e ".[transcribe]"')
             owner, chat = update.effective_user.id, update.effective_chat.id
             prefs = self.cfg.snapshot_ai(self.store.prefs(owner))
+            if not prefs.f1_enabled:
+                raise ValueError("Feature 1 is paused. Enable F1 in the dashboard before submitting a video.")
             self.cfg.check_ai(prefs.ai_provider, prefs.ai_model)
             attachment = update.message.video or update.message.document
             if attachment:
@@ -380,8 +437,18 @@ class Controller:
         self.worker = Worker(self.cfg, self.store, self.notify, self.shortlist, self.deliver)
         self.worker_task = asyncio.create_task(self.worker.run())
         self.maintenance_task = asyncio.create_task(self.maintain())
+        from cliper.faceless import FacelessWorker
+        from cliper.publishing import InstagramPublisher
+        async def publish_notify(post, message):
+            await self.app.bot.send_message(post["chat"], message)
+        self.publisher_task = asyncio.create_task(InstagramPublisher(self.controls.publications).run(publish_notify))
+        self.faceless_task = asyncio.create_task(FacelessWorker(self.controls).run())
 
     async def stop(self, app):
+        for task in (self.publisher_task, self.faceless_task):
+            if task:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
         if self.maintenance_task:
             self.maintenance_task.cancel()
             await asyncio.gather(self.maintenance_task, return_exceptions=True)
@@ -399,7 +466,9 @@ class Controller:
         app.add_handler(CommandHandler("clip", self.submit))
         app.add_handler(CommandHandler(["start", "help", "jobs", "settings", "provider", "clips", "length", "style",
                                         "captions", "reframe", "language", "resolution", "auto", "status",
-                                        "cancel", "retry", "render", "export", "cleanup"], self.command))
+                                        "cancel", "retry", "render", "export", "cleanup", "autopublish", "music",
+                                        "feature", "generate", "schedule"], self.command))
+        app.add_handler(CallbackQueryHandler(self.controls.callback, pattern=r"^(ui|pub):"))
         app.add_handler(CallbackQueryHandler(self.callback, pattern=r"^(all|top|custom|cancel):[0-9a-f]{12}$"))
         app.add_handler(MessageHandler(filters.VIDEO | filters.Document.VIDEO | (filters.TEXT & ~filters.COMMAND),
                                        self.submit))
@@ -416,4 +485,3 @@ if __name__ == "__main__":
     from cliper.cli import main
     sys.argv = [sys.argv[0], "bot"] + sys.argv[1:]
     main()
-

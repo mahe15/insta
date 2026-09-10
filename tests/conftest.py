@@ -13,7 +13,7 @@ if engines_dir.exists():
 
 @pytest.fixture
 def cfg(tmp_path):
-    return Config(data_dir=tmp_path, provider="heuristic", min_free_disk_mb=1)
+    return Config(data_dir=tmp_path, provider="heuristic", min_free_disk_mb=1, music_dir=tmp_path / "music")
 
 
 @pytest.fixture

@@ -1,0 +1,33 @@
+{
+  "dark": {
+    "name": "Dark Self-Improvement + Psychology + Discipline", "character_path": "", "instagram_account": "dark", "threshold": 90,
+    "brand": "Original cinematic anime realism. Dark environments, dramatic red/orange accents, strong contrast, film-like composition. Preserve the reference character in varied environments.",
+    "pillars": ["Discipline", "Fitness", "Psychology", "Productivity", "Time management", "Digital addiction", "Confidence", "Career", "Transformation"],
+    "banned_topics": [], "research_feeds": ["https://news.google.com/rss/search?q=self+improvement+psychology&hl=en-US&gl=US&ceid=US:en"]
+  },
+  "men": {
+    "name": "Men's Self-Improvement", "character_path": "", "instagram_account": "men", "threshold": 90,
+    "brand": "Original cinematic anime realism, grounded confidence, dramatic lighting, constructive and respectful. Preserve this niche's reference character.",
+    "pillars": ["Discipline", "Fitness habits", "Confidence", "Communication", "Career", "Healthy relationships"],
+    "banned_topics": ["Misogyny", "Pseudoscientific dominance claims"], "research_feeds": ["https://news.google.com/rss/search?q=men+wellbeing+habits&hl=en-US&gl=US&ceid=US:en"]
+  },
+  "money": {
+    "name": "Money Psychology", "character_path": "", "instagram_account": "money", "threshold": 90,
+    "brand": "Original cinematic anime realism, thoughtful mood, warm contrast. Preserve this niche's reference character.",
+    "pillars": ["Spending habits", "Delayed gratification", "Consumer psychology", "Saving habits", "Lifestyle inflation"],
+    "banned_topics": ["Guaranteed wealth", "Invented statistics"], "research_feeds": ["https://news.google.com/rss/search?q=consumer+behavior+money+habits&hl=en-US&gl=US&ceid=US:en"]
+  },
+  "tech": {
+    "name": "Technology and AI", "character_path": "", "instagram_account": "tech", "threshold": 90,
+    "brand": "Original cinematic anime realism, futuristic environments, cool light with orange accents. Preserve this niche's reference character.",
+    "pillars": ["AI literacy", "Technology habits", "Digital skills", "Automation concepts", "Responsible AI"],
+    "banned_topics": ["Unsupported product claims"], "research_feeds": ["https://news.google.com/rss/search?q=artificial+intelligence+technology&hl=en-US&gl=US&ceid=US:en"]
+  },
+  "finance": {
+    "name": "Finance, Investing and Business", "character_path": "", "instagram_account": "finance", "threshold": 90,
+    "brand": "Original cinematic anime realism, professional city/office environments, restrained dramatic lighting. Preserve this niche's reference character.",
+    "pillars": ["Risk literacy", "Diversification concepts", "Business fundamentals", "Cash flow", "Long-term thinking"],
+    "banned_topics": ["Personalized investment recommendations", "Stock picks", "Return forecasts", "Guaranteed profits"],
+    "research_feeds": ["https://news.google.com/rss/search?q=business+financial+education&hl=en-US&gl=US&ceid=US:en"]
+  }
+}

@@ -7,15 +7,20 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 import time
 import uuid
 
 from filelock import FileLock, Timeout
+import json_repair
 from pydantic import Field, ValidationError
 
 from .config import Config
 from .models import Model, Proposals
+
+log = logging.getLogger(__name__)
+
 
 URL = "https://chatgpt.com/"
 COMPOSER = '#prompt-textarea:visible, [data-testid="prompt-textarea"]:visible, textarea[aria-label="Chat with ChatGPT"]:visible'
@@ -49,6 +54,10 @@ class BrowserProviderError(RuntimeError):
     pass
 
 
+class BrowserBusyError(BrowserProviderError):
+    pass
+
+
 class ContextResult(Model):
     summary: str = Field(min_length=1, max_length=10000)
 
@@ -56,13 +65,13 @@ class ContextResult(Model):
 def parse_result(raw: str, request_id: str, result_type):
     """Accept only one complete JSON object, optionally enclosed in a JSON code fence."""
     content = raw.strip().replace("\r\n", "\n")
-    if content.startswith("```"):
-        match = re.fullmatch(r"```(?:json)?\s*\n(.*?)\n```[ \t]*", content, re.DOTALL | re.IGNORECASE)
-        if not match:
-            match = re.search(r"^```(?:json)?\s*\n(.*?)\n```\s*$", content, re.DOTALL | re.IGNORECASE)
-        if not match:
+    fence_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", content, re.DOTALL | re.IGNORECASE)
+    if fence_match:
+        content = fence_match.group(1).strip()
+    else:
+        content = re.sub(r"^(?:json|JSON)\s*\n", "", content).strip()
+        if not (content.startswith("{") and content.endswith("}")):
             raise ValueError("Expected one JSON object")
-        content = match.group(1).strip()
 
     def unique(pairs):
         result = {}
@@ -72,11 +81,34 @@ def parse_result(raw: str, request_id: str, result_type):
             result[key] = value
         return result
 
-    value = json.loads(content, object_pairs_hook=unique)
-    if (not isinstance(value, dict) or set(value) != {"request_id", "result"}
-            or value["request_id"] != request_id):
+    try:
+        value = json.loads(content, object_pairs_hook=unique)
+    except json.JSONDecodeError as jde:
+        if "Extra data" in str(jde):
+            raise ValueError("Expected one JSON object") from jde
+        try:
+            repaired = json_repair.repair_json(content)
+            value = json.loads(repaired, object_pairs_hook=unique)
+        except Exception:
+            raise ValueError("Expected one JSON object") from jde
+
+    if not isinstance(value, dict):
+        raise ValueError("Expected a JSON object")
+
+    if "result" in value:
+        if value.get("request_id") != request_id:
+            raise ValueError("Response does not match the current request")
+        target = value["result"]
+    elif value.get("request_id") == request_id:
+        target = {k: v for k, v in value.items() if k != "request_id"}
+    else:
         raise ValueError("Response does not match the current request")
-    return result_type.model_validate(value["result"], strict=True)
+
+    try:
+        return result_type.model_validate(target, strict=True)
+    except ValidationError:
+        return result_type.model_validate(target, strict=False)
+
 
 
 class BrowserEditorialClient:
@@ -87,6 +119,7 @@ class BrowserEditorialClient:
         self.playwright = None
         self.context = None
         self.request_lock = asyncio.Lock()
+        self.accept_downloads = False
 
     async def __aenter__(self):
         import os
@@ -103,13 +136,15 @@ class BrowserEditorialClient:
         try:
             self.lock.acquire()
         except Timeout:
-            raise BrowserProviderError("CLIPER's ChatGPT browser is already open. Close its login session first.") from None
+            raise BrowserBusyError("The AI browser is busy. Finish or close its login session first.") from None
         try:
             self.playwright = await async_playwright().start()
             self.context = await self.playwright.chromium.launch_persistent_context(
                 user_data_dir=str(self.profile), headless=self.cfg.browser_headless,
-                viewport={"width": 1280, "height": 900}, accept_downloads=False,
-                locale="en-US", timeout=30000)
+                viewport={"width": 1280, "height": 900}, accept_downloads=self.accept_downloads,
+                locale="en-US", timeout=30000,
+                args=["--disable-blink-features=AutomationControlled"],
+                ignore_default_args=["--enable-automation"])
             self.context.set_default_timeout(15000)
             return self
         except BaseException:
@@ -120,10 +155,14 @@ class BrowserEditorialClient:
         try:
             if self.context:
                 await self.context.close()
+        except Exception:
+            pass
         finally:
             try:
                 if self.playwright:
                     await self.playwright.stop()
+            except Exception:
+                pass
             finally:
                 self.lock.release()
 
@@ -250,16 +289,26 @@ class BrowserEditorialClient:
                        f"JSON SCHEMA:\n{json.dumps(schema)}\nSOURCE DATA:\n{prompt}")
             if len(payload) > self.cfg.browser_max_chars:
                 raise BrowserProviderError("Editorial prompt exceeds CHATGPT_BROWSER_MAX_CHARS. Use a shorter source.")
-            # One bounded repair only for completed, malformed JSON. Never resend after uncertain submission.
+            last_err = None
             for attempt in range(2):
                 raw = await self.exchange(payload)
                 try:
                     return parse_result(raw, request_id, result_type)
-                except (ValueError, ValidationError):
+                except (ValueError, ValidationError) as exc:
+                    last_err = exc
+                    log.warning("Attempt %d failed JSON validation for %s: %s", attempt, result_type.__name__, exc)
+                    try:
+                        raw_log_dir = self.cfg.data_dir / "logs"
+                        raw_log_dir.mkdir(parents=True, exist_ok=True)
+                        (raw_log_dir / "chatgpt_last_failed_raw.txt").write_text(raw, encoding="utf-8")
+                    except Exception:
+                        pass
                     if attempt:
                         raise BrowserProviderError(
-                            "ChatGPT did not return valid matching JSON after one repair. No clips were accepted.") from None
-                    payload += "\nA previous attempt failed JSON validation. Follow the exact schema and request_id."
+                            f"ChatGPT did not return valid matching JSON after one repair: {last_err}") from None
+                    payload += (f"\nA previous attempt failed validation: {str(exc)[:200]}. "
+                                f"Output ONLY the single valid JSON object matching the exact schema with request_id {request_id}.")
+
 
     async def text(self, instructions: str, prompt: str, max_tokens: int) -> str:
         # Summarize large transcripts in bounded, non-overlapping sections before combining.
@@ -290,6 +339,9 @@ class BrowserEditorialClient:
 
     async def proposals(self, instructions: str, prompt: str, max_tokens: int) -> Proposals:
         return await self.request(instructions, prompt, Proposals, max_tokens)
+
+    async def structured(self, instructions, prompt, result_type, max_tokens=6500):
+        return await self.request(instructions, prompt, result_type, max_tokens)
 
 
 async def login(cfg: Config):

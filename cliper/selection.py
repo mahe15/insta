@@ -20,6 +20,11 @@ Choose ONLY actual supplied segment IDs. first_segment <= last_segment. Respect 
 Begin on a complete sentence and finish on a conclusion. Avoid dangling pronouns, advertisements,
 housekeeping, context-dependent rebuttals, repetition and introductions with no payoff.
 hook_text must be a short VERBATIM opening excerpt, not suggested replacement audio.
+title is a concise truthful hook displayed above the video, maximum 90 characters.
+For EACH clip return music_category as exactly one of: cinematic_epic (powerful/motivational),
+emotional_sad (touching/melancholic), suspense_thriller (mystery/tension), energetic_hype
+(fast/exciting), chill_ambient (calm/reflective). Also return a natural Instagram caption and
+at most five relevant hashtags in the hashtags array. Do not put hashtags in caption.
 """
 
 
@@ -65,7 +70,8 @@ def validate_proposals(proposals: list[Proposal], transcript: Transcript, prefs:
         hook = p.hook_text if p.hook_text.casefold() in text[:400].casefold() else segments[0].text[:150]
         valid.append(Clip(id=0, start=start, end=end, title=p.title, reason=p.reason,
                           hook_text=hook, score=p.ratings.score(), ratings=p.ratings,
-                          text=text, selection_method=method))
+                          text=text, selection_method=method, music_category=p.music_category,
+                          caption=p.caption or p.title, hashtags=p.hashtags))
     return valid
 
 

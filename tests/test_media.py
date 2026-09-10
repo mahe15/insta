@@ -37,9 +37,9 @@ def test_captions_use_relative_timestamps_and_escape(tmp_path, transcript, clip)
 
 
 def test_reframe_fallback_and_no_caption_switch():
-    graph, mode = filter_graph(Preferences(captions=False), {}, "internal.ass")
+    graph, mode = filter_graph(Preferences(captions=False, layout="legacy"), {}, "internal.ass")
     assert mode == "blur" and "ass=filename" not in graph
-    graph, mode = filter_graph(Preferences(), {"safe_crop": True, "centers": [[0, .2], [3, .8]]}, "a.ass")
+    graph, mode = filter_graph(Preferences(layout="legacy"), {"safe_crop": True, "centers": [[0, .2], [3, .8]]}, "a.ass")
     assert mode == "auto" and "if(lt(t" in graph
 
 
@@ -73,7 +73,7 @@ async def test_real_ffmpeg_render_and_quality_check(tmp_path, cfg, transcript, c
                "sine=frequency=440:duration=3", "-c:v", "libx264", "-preset", "ultrafast",
                "-c:a", "aac", "-shortest", str(source)])
     short = clip.model_copy(update={"end": 2.5})
-    prefs = Preferences(width=360, reframe="blur")
+    prefs = Preferences(width=360, reframe="blur", layout="legacy")
     output = await render(source, tmp_path / "exports", transcript, short, prefs, cfg, lambda: False)
     qa = await quality_check(output, short, prefs, cfg, lambda: False)
     assert qa["width"] == 360 and qa["height"] == 640

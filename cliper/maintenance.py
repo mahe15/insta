@@ -16,6 +16,11 @@ def cleanup(store: Store, days: int) -> int:
     removed = 0
     base = (store.root / "jobs").resolve()
     for row in rows:
+        with store.connect() as db:
+            if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='publications'").fetchone():
+                if db.execute("SELECT 1 FROM publications WHERE origin LIKE ? AND state NOT IN ('published','rejected')",
+                              (row["id"] + ":%",)).fetchone():
+                    continue
         directory = store.directory(row["id"])
         # Never delete user CLI source files, symlinks, or anything outside managed jobs.
         if directory.is_symlink() or directory.resolve().parent != base:
@@ -36,4 +41,3 @@ def export_metadata(directory: Path) -> Path:
             if file.is_file() and file.suffix in {".json", ".ass", ".srt"}:
                 archive.write(file, str(file.relative_to(directory)))
     return output
-

@@ -55,6 +55,16 @@ class Preferences(Model):
     language: str = "auto"
     width: Literal[360, 720, 1080] = 1080
     auto_render: bool = False
+    layout: Literal["square_hook", "legacy"] = "square_hook"
+    music: bool = True
+    auto_publish: bool = False
+    instagram_account: str = "clips"
+    f1_enabled: bool = True
+    f2_enabled: bool = False
+    active_feature: Literal["f1", "f2", "both"] = "f1"
+    f2_auto_publish: bool = False
+    selected_niche: str = "dark"
+    enabled_niches: list[str] = Field(default_factory=lambda: ["dark", "men", "money", "tech", "finance"])
 
     @model_validator(mode="after")
     def lengths(self):
@@ -82,6 +92,9 @@ class Proposal(Model):
     reason: str = Field(max_length=500)
     hook_text: str = Field(max_length=150)
     ratings: Ratings
+    music_category: Literal["cinematic_epic", "emotional_sad", "suspense_thriller", "energetic_hype", "chill_ambient"] = "chill_ambient"
+    caption: str = Field(default="", max_length=1800)
+    hashtags: list[str] = Field(default_factory=list, max_length=5)
 
 
 class Proposals(Model):
@@ -99,6 +112,9 @@ class Clip(Model):
     ratings: Ratings
     text: str
     selection_method: str
+    music_category: Literal["cinematic_epic", "emotional_sad", "suspense_thriller", "energetic_hype", "chill_ambient"] = "chill_ambient"
+    caption: str = ""
+    hashtags: list[str] = Field(default_factory=list, max_length=5)
 
 
 class Analysis(Model):

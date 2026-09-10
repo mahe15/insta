@@ -206,6 +206,10 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("bot", help="Start Telegram polling and the persistent worker")
     sub.add_parser("browser-login", help="Open CLIPER's Chromium profile for manual ChatGPT login")
+    sub.add_parser("gemini-login", help="Open the separate Gemini profile for manual image-generation login")
+    server = sub.add_parser("serve-media", help="Serve only staged Instagram media behind your HTTPS reverse proxy")
+    server.add_argument("--host", default="127.0.0.1")
+    server.add_argument("--port", type=int, default=8787)
     sub.add_parser("browser-check", help="Send a tiny JSON request through the saved ChatGPT website session")
     check = sub.add_parser("doctor", help="Check tools and configuration")
     check.add_argument("--online", action="store_true")
@@ -237,6 +241,14 @@ def main():
         if args.command == "browser-login":
             from .browser_provider import login
             asyncio.run(login(cfg))
+            return
+        if args.command == "gemini-login":
+            from .gemini_images import login
+            asyncio.run(login(cfg))
+            return
+        if args.command == "serve-media":
+            from .public_media import serve
+            serve(args.host, args.port)
             return
         if args.command == "browser-check":
             from .browser_provider import BrowserEditorialClient

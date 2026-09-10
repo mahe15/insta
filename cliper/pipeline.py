@@ -43,17 +43,20 @@ class Pipeline:
                 raise ValueError("Source file was removed. Submit a new job.")
         else:
             if source_input.startswith("https://"):
-                await progress("Downloading video")
-                source = await media.download(source_input, directory, self.cfg, cancelled)
+                from .remote_media import audio
+                await progress("Downloading audio only for analysis")
+                source, info = await audio(source_input, directory / "audio-source", self.cfg, cancelled)
+                write_json(reference, {"path": str(source), "media": info, "kind": "remote_audio", "url": source_input})
             else:
                 source = Path(source_input).resolve()
                 if not source.is_file():
                     raise ValueError("Source file does not exist")
                 if source.stat().st_size > self.cfg.max_download_mb * 1024**2:
                     raise ValueError("Source exceeds MAX_DOWNLOAD_MB")
-            await progress("Checking source video and audio")
-            info = await media.probe(source, self.cfg, cancelled)
-            write_json(reference, {"path": str(source), "media": info})
+            if not reference.exists():
+                await progress("Checking source video and audio")
+                info = await media.probe(source, self.cfg, cancelled)
+                write_json(reference, {"path": str(source), "media": info})
         transcript_path = directory / "transcript.json"
         if transcript_path.exists():
             transcript = Transcript.model_validate_json(transcript_path.read_text(encoding="utf-8"))
@@ -74,15 +77,40 @@ class Pipeline:
 
     async def render_one(self, directory: Path, clip: Clip, prefs: Preferences, cancelled=lambda: False):
         self.cfg.check_disk()
-        source = Path(json.loads((directory / "source.json").read_text(encoding="utf-8"))["path"])
+        reference = json.loads((directory / "source.json").read_text(encoding="utf-8"))
+        source = Path(reference["path"])
         transcript = Transcript.model_validate_json((directory / "transcript.json").read_text(encoding="utf-8"))
         output = directory / "clips" / f"clip_{clip.id:02}.mp4"
         if output.exists():
             try:
+                metadata = json.loads(output.with_suffix(".json").read_text("utf-8"))
+                if metadata.get("preferences") != prefs.model_dump():
+                    raise ValueError("Editing preferences changed")
                 await media.quality_check(output, clip, prefs, self.cfg, cancelled)
                 return output
-            except (ValueError, RuntimeError):
+            except (ValueError, RuntimeError, OSError, KeyError):
                 log.warning("Cached export failed validation; rendering again")
+        if reference.get("kind") == "remote_audio":
+            from .models import Segment, Word
+            from .remote_media import section
+            source = await section(reference["url"], directory / "ranges" / f"clip_{clip.id:02}",
+                                   clip.start, clip.end, self.cfg, cancelled)
+            original = clip
+            segments = []
+            for s in transcript.segments:
+                if s.start >= clip.start and s.end <= clip.end + .01:
+                    segments.append(Segment(start=max(0, s.start - clip.start), end=s.end - clip.start,
+                                            text=s.text, words=[Word(start=max(0, w.start - clip.start),
+                                            end=w.end - clip.start, text=w.text) for w in s.words]))
+            transcript = Transcript(language=transcript.language, duration=clip.end - clip.start, segments=segments)
+            clip = clip.model_copy(update={"start": 0, "end": clip.end - clip.start})
+            output = await media.render(source, directory / "clips", transcript, clip, prefs, self.cfg, cancelled)
+            meta_path = output.with_suffix(".json")
+            metadata = json.loads(meta_path.read_text("utf-8"))
+            metadata["clip"] = original.model_dump()
+            metadata["source_range"] = {"start": original.start, "end": original.end, "local_start": 0}
+            write_json(meta_path, metadata)
+            return output
         return await media.render(source, directory / "clips", transcript, clip, prefs, self.cfg, cancelled)
 
 
@@ -118,7 +146,7 @@ class Worker:
             if cancelled():
                 raise JobCancelled()
             self.store.update(job_id, state="awaiting_selection", stage="Choose clips to render")
-            if prefs.auto_render:
+            if prefs.auto_render or prefs.auto_publish:
                 self.store.select(job_id, job["owner"], [c.id for c in analysis.clips])
             else:
                 await self.shortlist(job, analysis)
@@ -159,12 +187,16 @@ class Worker:
             self.current = asyncio.create_task(self.process(job))
             try:
                 while not self.current.done():
-                    if (self.stopping.is_set() or self.store.get(job["id"])["state"] == "cancelled") and not self.current.cancelling():
+                    if (self.stopping.is_set() or self.store.get(job["id"])["state"] == "cancelled"
+                            or not self.store.prefs(job["owner"]).f1_enabled) and not self.current.cancelling():
                         self.current.cancel()
                     await asyncio.wait({self.current}, timeout=.4)
                 await self.current
             except (asyncio.CancelledError, JobCancelled):
                 # On shutdown leave the durable state for recovery; explicit /cancel is already saved.
+                if not self.stopping.is_set() and self.store.get(job["id"])["state"] != "cancelled":
+                    self.store.update(job["id"], state="queued_analysis" if job["state"] == "analyzing" else "queued_render",
+                                      stage="Feature 1 paused")
                 pass
             except Exception as exc:
                 error = safe_error(exc, self.cfg)

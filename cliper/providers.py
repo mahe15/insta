@@ -5,6 +5,7 @@ is a transport client here; those requests go directly to xAI or Google.
 """
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 
 from .config import AISettings
@@ -14,14 +15,41 @@ from .models import Proposals
 @asynccontextmanager
 async def editorial_client(cfg, settings):
     if settings.provider == "chatgpt_browser":
-        from .browser_provider import BrowserEditorialClient
-        async with BrowserEditorialClient(cfg) as client:
+        from .browser_provider import BrowserBusyError, BrowserEditorialClient
+        client = BrowserEditorialClient(cfg)
+        for attempt in range(900):
+            try:
+                await client.__aenter__()
+                break
+            except BrowserBusyError:
+                if attempt == 899:
+                    raise
+                await asyncio.sleep(1)
+        try:
             yield client
+        finally:
+            await client.__aexit__(None, None, None)
     else:
         from openai import AsyncOpenAI
         async with AsyncOpenAI(api_key=settings.key, base_url=settings.base_url,
                                timeout=120, max_retries=2) as transport:
             yield EditorialClient(transport, settings)
+
+
+class ScopedEditorialClient:
+    """Release the reasoning browser between requests so the two features can share it."""
+    def __init__(self, cfg, settings):
+        self.cfg, self.settings = cfg, settings
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return None
+
+    async def structured(self, instructions, prompt, result_type, max_tokens=6500):
+        async with editorial_client(self.cfg, self.settings) as client:
+            return await client.structured(instructions, prompt, result_type, max_tokens)
 
 
 async def verify_model(client, settings: AISettings):
@@ -61,6 +89,22 @@ def clean_for_gemini(schema: dict) -> dict:
 class EditorialClient:
     def __init__(self, client, settings: AISettings):
         self.client, self.settings = client, settings
+
+    async def structured(self, instructions, prompt, result_type, max_tokens=6500):
+        if self.settings.provider == "openai":
+            response = await self.client.responses.parse(model=self.settings.model, store=False,
+                instructions=instructions, input=prompt, text_format=result_type, max_output_tokens=max_tokens)
+            if response.status != "completed" or response.output_parsed is None:
+                raise ValueError("AI returned an incomplete structured response")
+            return result_type.model_validate(response.output_parsed)
+        schema = result_type.model_json_schema()
+        descriptor = {"name": "studio_result", "schema": schema, "strict": True}
+        if self.settings.provider == "gemini":
+            descriptor = {"name": "studio_result", "schema": clean_for_gemini(schema)}
+        response = await self.client.chat.completions.create(**self.chat_args(instructions, prompt, max_tokens),
+            response_format={"type": "json_schema", "json_schema": descriptor})
+        message = self.complete_message(response)
+        return result_type.model_validate_json(message.content or "")
 
     async def text(self, instructions: str, prompt: str, max_tokens: int) -> str:
         if self.settings.provider == "openai":

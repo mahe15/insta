@@ -2,18 +2,22 @@
 
 **Your private Telegram clip studio, built in Python.** Send a long video, review a ranked shortlist, and receive captioned vertical clips.
 
+**New: square clips with hook titles, category music, Instagram publishing and five-niche faceless carousels.** See [Feature 1 / Feature 2 setup and Telegram controls](FEATURES.md) for local account configuration, character images and scheduling.
+
 ```text
 Telegram link / video upload
   → persistent SQLite queue
-  → yt-dlp download + source validation
+  → audio-only download + source validation (video links)
   → local faster-whisper transcription with word timestamps
   → full-transcript context → candidate discovery → editorial critique
   → duration validation + overlap / repeated-text removal
   → choose all, top 3, or custom clips
-  → face-aware crop or full-frame blurred layout
-  → FFmpeg captions + audio normalization + H.264/AAC export
+  → download only selected video ranges
+  → square video on black vertical canvas + white hook title
+  → FFmpeg captions + category music at 20% + NVENC H.264/AAC export
   → complete decode / resolution / duration / size / audio checks
   → Telegram delivery + downloadable subtitles and edit metadata
+  → Instagram approval or automatic publishing (2-hour clip spacing)
 ```
 
 ## Start on this Windows computer

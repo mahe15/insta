@@ -54,7 +54,9 @@ class Config:
     min_free_disk_mb: int = 3000
     max_active_jobs: int = 3
     retention_days: int = 7
+    music_dir: Path = Path("music")
     allowed_hosts: tuple[str, ...] = ("youtube.com", "youtu.be", "vimeo.com", "twitch.tv")
+    skip_image_qa: bool = True
 
     @classmethod
     def load(cls):
@@ -80,8 +82,10 @@ class Config:
             gpu_device_index=int(os.getenv("GPU_DEVICE_INDEX", "0")),
             video_encoder=os.getenv("VIDEO_ENCODER", "libx264").strip().lower(),
             ffmpeg_path=os.getenv("FFMPEG_PATH", ""),
+            music_dir=Path(os.getenv("MUSIC_DIR", "music")).resolve(),
             allowed_hosts=tuple(x.strip().lower() for x in os.getenv(
                 "ALLOWED_VIDEO_HOSTS", "youtube.com,youtu.be,vimeo.com,twitch.tv").split(",") if x.strip()),
+            skip_image_qa=os.getenv("CLIPER_SKIP_IMAGE_QA", "true").lower() in ("1", "true", "yes"),
         )
         for attr in ("max_source_minutes", "max_download_mb", "min_free_disk_mb", "max_active_jobs",
                      "retention_days"):

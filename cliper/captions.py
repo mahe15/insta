@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import textwrap
 from pathlib import Path
 
 from .models import Clip, Preferences, Transcript, Word
@@ -60,7 +61,18 @@ Style: Default,DejaVu Sans,{font_size},&H00FFFFFF,{accent},&H00141210,&H80000000
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     events, srt = [], []
-    for group in chunks(transcript, clip):
+    if prefs.layout == "square_hook":
+        top = (height - width) // 2
+        columns = 30
+        title_lines = textwrap.wrap(safe_ass(clip.title), width=columns)
+        while len(title_lines) > 3 and columns < 60:
+            columns += 1
+            title_lines = textwrap.wrap(safe_ass(clip.title), width=columns)
+        title = r"\N".join(title_lines)
+        events.append(f"Dialogue: 1,0:00:00.00,{ass_time(clip.end - clip.start)},Default,,0,0,0,,"
+                      + f"{{\\an2\\pos({width // 2},{top - round(width * .035)})"
+                      + f"\\fnArial\\fs{round(width * .05 * 30 / columns)}\\b1\\1c&H00FFFFFF&\\bord0\\shad0}}{title}")
+    for group in chunks(transcript, clip) if prefs.captions else []:
         plain = " ".join(w.text for w in group)
         srt.append(f"{len(srt) + 1}\n{srt_time(group[0].start)} --> {srt_time(group[-1].end)}\n{plain}\n")
         if prefs.style == "minimal":
