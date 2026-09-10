@@ -36,7 +36,8 @@ def cleanup(store: Store, days: int) -> int:
 def export_metadata(directory: Path) -> Path:
     output = directory / "captions-and-edit-plans.zip"
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for file in [directory / "analysis.json", directory / "transcript.json",
+        for file in [directory / "analysis.json", directory / "transcript.json", directory / "gemini-clips.json",
+                     *(directory / "ranges").glob("*/caption-verification/*.json"),
                      *(directory / "clips").glob("*")]:
             if file.is_file() and file.suffix in {".json", ".ass", ".srt"}:
                 archive.write(file, str(file.relative_to(directory)))

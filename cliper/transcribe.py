@@ -19,6 +19,7 @@ def main():
     parser.add_argument("--device-index", type=int, default=0)
     parser.add_argument("--language", default="auto")
     parser.add_argument("--cache", required=True)
+    parser.add_argument("--beam-size", type=int, default=5)
     args = parser.parse_args()
     if args.device == "cuda":
         check_cuda(args.device_index, args.compute)
@@ -28,7 +29,7 @@ def main():
                          device_index=args.device_index, download_root=args.cache, cpu_threads=4)
     print(f"Whisper: device={model.model.device}, compute={model.model.compute_type}", flush=True)
     segments, info = model.transcribe(
-        args.audio, beam_size=5, word_timestamps=True, vad_filter=True,
+        args.audio, beam_size=args.beam_size, word_timestamps=True, vad_filter=True,
         language=None if args.language == "auto" else args.language,
         condition_on_previous_text=False, vad_parameters={"min_silence_duration_ms": 500})
     result = []
@@ -49,7 +50,8 @@ def main():
                 continue
             if pending and (w.start - pending[-1].end > 1.2 or w.start - pending[0].start > 18):
                 flush()
-            pending.append(Word(start=max(0, w.start), end=w.end, text=w.word.strip()))
+            pending.append(Word(start=max(0, w.start), end=w.end, text=w.word.strip(),
+                                confidence=max(0, min(1, float(w.probability)))))
             if w.word.rstrip().endswith((".", "!", "?", "。", "！", "？")):
                 flush()
         print(f"Transcribed {segment.end:.0f}s", flush=True)
@@ -59,6 +61,7 @@ def main():
     write_json(args.output.with_suffix(".runtime.json"), {"device": model.model.device,
                                                         "compute_type": model.model.compute_type,
                                                         "device_index": args.device_index,
+                                                        "beam_size": args.beam_size,
                                                         "model": args.model})
 
 

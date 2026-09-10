@@ -52,7 +52,8 @@ def test_missing_character_and_feature_pause(cfg, monkeypatch):
 
 @pytest.mark.parametrize("approved", [True, False])
 @pytest.mark.parametrize("auto", [True, False])
-async def test_full_carousel_pipeline_and_pre_image_gate(cfg, monkeypatch, approved, auto):
+@pytest.mark.parametrize("skip_qa", [True, False])
+async def test_full_carousel_pipeline_and_pre_image_gate(cfg, monkeypatch, approved, auto, skip_qa):
     cfg.provider = "chatgpt_browser"
     reference = cfg.data_dir / "character.png"
     frame = np.zeros((400, 320, 3), np.uint8)
@@ -62,7 +63,7 @@ async def test_full_carousel_pipeline_and_pre_image_gate(cfg, monkeypatch, appro
     config = cfg.data_dir / "niches.json"
     config.write_text(json.dumps({"dark": {"character_path": str(reference), "instagram_account": "dark", "threshold": 90}}))
     monkeypatch.setenv("NICHES_CONFIG_FILE", str(config))
-    cfg.skip_image_qa = False
+    cfg.skip_image_qa = skip_qa
     c = Controller(cfg)
     c.app = SimpleNamespace(bot=SimpleNamespace(send_message=AsyncMock(), send_media_group=AsyncMock()))
     prefs = Preferences(f2_enabled=True, f2_auto_publish=auto)
@@ -100,10 +101,14 @@ async def test_full_carousel_pipeline_and_pre_image_gate(cfg, monkeypatch, appro
             assert ContentReview in calls
             assert ref == reference
             generated.append(ref)
-            cv2.imwrite(str(output), frame)
+            artwork = frame.copy()
+            cv2.rectangle(artwork, (20 + len(generated) * 25, 60), (130 + len(generated) * 25, 260),
+                          (100, 60 + len(generated) * 35, 200), -1)
+            cv2.putText(artwork, f"Step {len(generated)}", (30, 350), cv2.FONT_HERSHEY_SIMPLEX, .8, (255, 255, 255), 2)
+            cv2.imwrite(str(output), artwork)
         async def review(self, ref, output, text):
             reviewed.append(text)
-            return ImageReview(text_matches=True, character_matches=True, composition_ok=True, issues=[])
+            return ImageReview(text_matches=True, character_matches=True, composition_ok=True, issues=[], observed_text=text)
 
     monkeypatch.setattr("cliper.faceless.ScopedEditorialClient", AI)
     monkeypatch.setattr("cliper.faceless.GeminiImages", Gemini)
@@ -115,12 +120,14 @@ async def test_full_carousel_pipeline_and_pre_image_gate(cfg, monkeypatch, appro
         assert c.controls.publications.recent(42) == []
         return
     await worker.process(worker.store.get(identity))
-    assert len(generated) == len(reviewed) == 4
+    assert len(generated) == 4 and len(reviewed) == (0 if skip_qa else 4)
     assert worker.store.get(identity)["state"] == "ready"
     posts = c.controls.publications.recent(42)
-    assert len(posts) == 1 and posts[0]["state"] == ("queued" if auto else "approval") and posts[0]["account"] == "dark"
-    if auto:
+    assert len(posts) == 1 and posts[0]["state"] == ("queued" if auto and not skip_qa else "approval") and posts[0]["account"] == "dark"
+    if auto and not skip_qa:
         assert posts[0]["due"] == publish_at and c.controls.publications.claim() is None
+    if skip_qa:
+        assert "skipped" in json.loads(posts[0]["payload"])["review_note"]
     paths = json.loads(posts[0]["payload"])["paths"]
     assert len(paths) == 4 and cv2.imread(paths[0]).shape[:2] == (1350, 1080)
     first, last = cv2.imread(paths[0]), cv2.imread(paths[-1])
@@ -170,9 +177,12 @@ async def test_gemini_browser_reference_upload_download_and_review(cfg):
     from cliper.gemini_images import GeminiImages
     playwright = pytest.importorskip("playwright.async_api")
     frame = np.full((400, 320, 3), (20, 80, 120), dtype=np.uint8)
+    cv2.circle(frame, (160, 180), 80, (230, 230, 230), -1)
     reference = cfg.data_dir / "reference.png"
     cv2.imwrite(str(reference), frame)
-    encoded = base64.b64encode(reference.read_bytes()).decode()
+    generated_frame = frame.copy()
+    cv2.rectangle(generated_frame, (10, 280), (310, 370), (230, 160, 20), -1)
+    encoded = base64.b64encode(cv2.imencode(".png", generated_frame)[1].tobytes()).decode()
     uploads = []
     html = '''<input type="file" multiple onchange="recordUploads([...this.files].map(f=>f.name))">
         <rich-textarea><div contenteditable="true" role="textbox"></div></rich-textarea>
@@ -181,7 +191,7 @@ async def test_gemini_browser_reference_upload_download_and_review(cfg):
             if(document.querySelector('input').files.length===2){
                 const r=document.createElement('model-response');
                 r.innerHTML='<code></code><button aria-label="Copy"></button>';
-                r.querySelector('code').textContent=JSON.stringify({text_matches:true,character_matches:true,composition_ok:true,issues:[]});
+                r.querySelector('code').textContent=JSON.stringify({text_matches:true,character_matches:true,composition_ok:true,issues:[],observed_text:'Test text'});
                 document.body.appendChild(r);
             }else{
                 const b=document.createElement('button'); b.setAttribute('aria-label','Download full size');

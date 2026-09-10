@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -14,6 +15,11 @@ from urllib.parse import urlsplit
 import httpx
 
 from .storage import Store
+
+
+def asset_hash(path):
+    with Path(path).open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def caption_text(caption: str, hashtags: list[str]) -> str:
@@ -40,10 +46,12 @@ class PublishStore:
             ''')
 
     def add(self, owner, chat, origin, feature, account, paths, caption, hashtags, *, auto=False,
-            predecessor=None, gap=0, due=None, niche=None):
+            predecessor=None, gap=0, due=None, niche=None, review_note=""):
         identity = uuid.uuid4().hex[:12]
         payload = json.dumps({"paths": [str(Path(p).resolve()) for p in paths],
-                              "caption": caption_text(caption, hashtags), "automatic": auto, "niche": niche})
+                              "caption": caption_text(caption, hashtags), "automatic": auto, "niche": niche,
+                              "review_note": review_note,
+                              "asset_hashes": [asset_hash(p) if Path(p).is_file() else None for p in paths]})
         with self.store.connect() as db:
             db.execute("INSERT OR IGNORE INTO publications (id,owner,chat,origin,feature,account,state,due,"
                        "predecessor,gap,payload,created) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -75,9 +83,10 @@ class PublishStore:
         payload = json.loads(post["payload"])
         payload["automatic"] = False
         with self.store.connect() as db:
-            result = db.execute("UPDATE publications SET state=?,due=?,predecessor=NULL,gap=0,error='',payload=? "
+            result = db.execute("UPDATE publications SET state=?,due=?,predecessor=CASE WHEN ? THEN NULL ELSE predecessor END,"
+                                "gap=CASE WHEN ? THEN 0 ELSE gap END,error='',payload=? "
                                 "WHERE id=? AND owner=? AND state IN ('approval','failed','queued')",
-                                ("queued" if approved else "rejected", time.time(), json.dumps(payload), identity, owner))
+                                ("queued" if approved else "rejected", time.time(), approved, approved, json.dumps(payload), identity, owner))
             if not result.rowcount:
                 raise ValueError("Already publishing/published, or outcome uncertain; inspect Instagram before retrying")
 
@@ -94,8 +103,21 @@ class PublishStore:
                               (time.time(),)).fetchall()
             for row in rows:
                 if row["predecessor"]:
-                    prev = db.execute("SELECT state,published_at FROM publications WHERE id=?", (row["predecessor"],)).fetchone()
-                    if not prev or prev["state"] != "published" or prev["published_at"] + row["gap"] > time.time():
+                    identity, visited, ready = row["predecessor"], {row["id"]}, False
+                    while identity and identity not in visited:
+                        visited.add(identity)
+                        prev = db.execute("SELECT state,published_at,predecessor FROM publications WHERE id=?", (identity,)).fetchone()
+                        if not prev:
+                            break
+                        if prev["state"] == "rejected":
+                            identity = prev["predecessor"]
+                            if not identity:
+                                ready = True
+                            continue
+                        ready = (prev["state"] == "published" and prev["published_at"] is not None
+                                 and prev["published_at"] + row["gap"] <= time.time())
+                        break
+                    if not ready:
                         continue
                 db.execute("UPDATE publications SET state='preparing' WHERE id=?", (row["id"],))
                 return dict(row) | {"state": "preparing"}
@@ -127,7 +149,9 @@ def account_config(key: str, owner: int):
     return account, token, f"https://{host}/{version}"
 
 
-def stage_assets(paths: list[str], identity: str) -> list[str]:
+def stage_assets(paths: list[str], identity: str, expected_hashes=None) -> list[str]:
+    if not re.fullmatch(r"[0-9a-f]{12}", identity):
+        raise ValueError("Invalid publication identity")
     base = os.getenv("PUBLIC_MEDIA_BASE_URL", "").rstrip("/")
     url = urlsplit(base)
     if url.scheme != "https" or not url.hostname or url.username or url.password or url.query or url.fragment:
@@ -135,14 +159,23 @@ def stage_assets(paths: list[str], identity: str) -> list[str]:
     root = Path(os.getenv("PUBLIC_MEDIA_DIR", "data/public-media")).resolve()
     folder = root / identity
     folder.mkdir(parents=True, exist_ok=True)
+    if folder.is_symlink() or folder.resolve().parent != root:
+        raise ValueError("Publication directory must stay inside the media root")
     urls = []
     for n, name in enumerate(paths):
         path = Path(name)
         if not path.is_file() or path.suffix.lower() not in {".mp4", ".jpg", ".jpeg"}:
             raise ValueError("Publication asset is missing or has an unsupported format")
         target = folder / f"{n + 1}{path.suffix.lower()}"
+        current_hash = asset_hash(path)
+        if expected_hashes and n < len(expected_hashes) and expected_hashes[n] and expected_hashes[n] != current_hash:
+            raise ValueError("A publication asset changed after review; generate a new publication")
+        if target.is_symlink() or target.exists() and asset_hash(target) != current_hash:
+            raise ValueError("Staged media differs from the approved asset; refusing a stale publication")
         if not target.exists():
-            shutil.copy2(path, target)
+            temporary = target.with_suffix(target.suffix + ".tmp")
+            shutil.copy2(path, temporary)
+            temporary.replace(target)
         urls.append(f"{base}/{identity}/{target.name}")
     return urls
 
@@ -158,7 +191,7 @@ class InstagramPublisher:
             raise ValueError("Instagram account mapping changed after preparation; refusing to publish to a different account")
         self.store.update(post["id"], target_id=target)
         payload = json.loads(post["payload"])
-        urls = stage_assets(payload["paths"], post["id"])
+        urls = await asyncio.to_thread(stage_assets, payload["paths"], post["id"], payload.get("asset_hashes"))
         client = self.client or httpx.AsyncClient(timeout=60, follow_redirects=False)
 
         async def request(method, path, **params):

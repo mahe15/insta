@@ -4,6 +4,10 @@
 
 **New: square clips with hook titles, category music, Instagram publishing and five-niche faceless carousels.** See [Feature 1 / Feature 2 setup and Telegram controls](FEATURES.md) for local account configuration, character images and scheduling.
 
+**Studio upgrade:** grounded hook alternatives, face-aware square cropping, caption timing correction, speech ducking, technical quality checks, stronger carousel scripts and image review, and safer publishing retries. Read the [research and evidence](RESEARCH_AND_UPGRADE.md) and [upgrade guide](UPGRADE_GUIDE.md).
+
+**Clipping using Gemini:** send `/geminiclip YOUTUBE_URL`, or select **Clipping using Gemini** in `/start` and paste a YouTube link. Gemini's saved Chromium session selects ranges, hooks and timed captions directly from the link. Only selected ranges are downloaded. No Gemini API key is used; website account limits apply. See [Gemini clipping setup and modes](FEATURES.md#clipping-using-gemini).
+
 ```text
 Telegram link / video upload
   → persistent SQLite queue
@@ -23,6 +27,8 @@ Telegram link / video upload
 ## Start on this Windows computer
 
 The project virtual environment and dependencies have already been installed in `.venv`.
+
+ChatGPT, Gemini images and Gemini clipping reuse the project's existing saved Chromium profile at `data/browsers/chatgpt-profile`. Gemini clipping does not require another browser profile or an API key.
 
 1. Open `.env` in this project. Add your **`TELEGRAM_BOT_TOKEN`** from [@BotFather](https://t.me/BotFather). For no API key, choose **`AI_PROVIDER=chatgpt_browser`** and follow the ChatGPT browser setup below. Alternatively, choose an API provider and add its `OPENAI_API_KEY`, `XAI_API_KEY`, or `GEMINI_API_KEY` locally.
 2. Start the bot:

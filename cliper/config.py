@@ -46,6 +46,7 @@ class Config:
     whisper_model: str = "small"
     whisper_device: str = "cpu"
     whisper_compute: str = "int8"
+    whisper_beam_size: int = 5
     gpu_device_index: int = 0
     video_encoder: str = "libx264"
     ffmpeg_path: str = ""
@@ -56,7 +57,7 @@ class Config:
     retention_days: int = 7
     music_dir: Path = Path("music")
     allowed_hosts: tuple[str, ...] = ("youtube.com", "youtu.be", "vimeo.com", "twitch.tv")
-    skip_image_qa: bool = True
+    skip_image_qa: bool = False
 
     @classmethod
     def load(cls):
@@ -79,13 +80,14 @@ class Config:
             whisper_model=os.getenv("WHISPER_MODEL", "small"),
             whisper_device=os.getenv("WHISPER_DEVICE", "cpu"),
             whisper_compute=os.getenv("WHISPER_COMPUTE_TYPE", "int8"),
+            whisper_beam_size=int(os.getenv("WHISPER_BEAM_SIZE", "5")),
             gpu_device_index=int(os.getenv("GPU_DEVICE_INDEX", "0")),
             video_encoder=os.getenv("VIDEO_ENCODER", "libx264").strip().lower(),
             ffmpeg_path=os.getenv("FFMPEG_PATH", ""),
             music_dir=Path(os.getenv("MUSIC_DIR", "music")).resolve(),
             allowed_hosts=tuple(x.strip().lower() for x in os.getenv(
                 "ALLOWED_VIDEO_HOSTS", "youtube.com,youtu.be,vimeo.com,twitch.tv").split(",") if x.strip()),
-            skip_image_qa=os.getenv("CLIPER_SKIP_IMAGE_QA", "true").lower() in ("1", "true", "yes"),
+            skip_image_qa=os.getenv("CLIPER_SKIP_IMAGE_QA", "false").lower() in ("1", "true", "yes"),
         )
         for attr in ("max_source_minutes", "max_download_mb", "min_free_disk_mb", "max_active_jobs",
                      "retention_days"):
@@ -102,6 +104,8 @@ class Config:
             raise ValueError("VIDEO_ENCODER must be libx264 or h264_nvenc")
         if cfg.gpu_device_index < 0:
             raise ValueError("GPU_DEVICE_INDEX must be zero or greater")
+        if not 1 <= cfg.whisper_beam_size <= 10:
+            raise ValueError("WHISPER_BEAM_SIZE must be 1–10")
         if cfg.whisper_device == "cuda":
             from .hardware import configure_cuda_paths
             configure_cuda_paths()

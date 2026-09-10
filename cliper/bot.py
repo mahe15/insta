@@ -45,6 +45,7 @@ Send a video link or upload a video. I’ll transcribe it, find complete moments
 Choose your clips, then get vertical videos with highlighted captions and balanced audio.
 
 /settings — your editing preferences
+/geminiclip YOUTUBE_URL — clipping using Gemini website, no API key
 /provider — choose ChatGPT browser, OpenAI, Grok, Gemini or offline ranking
 /jobs — recent jobs
 /status JOB — progress or shortlist
@@ -112,7 +113,10 @@ class Controller:
             [InlineKeyboardButton("🎬 Generate all", callback_data=f"all:{job['id']}"),
              InlineKeyboardButton("🔥 Top 3", callback_data=f"top:{job['id']}")],
             [InlineKeyboardButton("Choose clip numbers", callback_data=f"custom:{job['id']}"),
-             InlineKeyboardButton("Cancel", callback_data=f"cancel:{job['id']}")]])
+             InlineKeyboardButton("Cancel", callback_data=f"cancel:{job['id']}")],
+            *[[InlineKeyboardButton(f"Review hook / quality · clip {clip.id}",
+                                    callback_data=f"ui:clipinfo:{job['id']}:{clip.id}")]
+              for clip in analysis.clips]])
         return description, keyboard
 
     async def shortlist(self, job, analysis):
@@ -276,7 +280,7 @@ class Controller:
                         job = f2_store.get(args[0], owner)
                         is_f2 = True
                     except Exception:
-                        raise ValueError(f"Job {args[0]} not found")
+                        raise ValueError(f"Job {args[0]} not found") from None
                 if is_f2:
                     if name == "retry":
                         if job["state"] != "failed":
@@ -381,15 +385,21 @@ class Controller:
         job = None
         try:
             self.cfg.check_disk()
-            if not importlib.util.find_spec("faster_whisper"):
-                raise ValueError('Transcription is not installed. Run: pip install -e ".[transcribe]"')
             owner, chat = update.effective_user.id, update.effective_chat.id
             prefs = self.cfg.snapshot_ai(self.store.prefs(owner))
+            command = (update.message.text or "").split(maxsplit=1)[0].split("@")[0]
+            if command == "/geminiclip":
+                prefs = prefs.model_copy(update={"clipping_mode": "gemini_browser"})
+            if (prefs.clipping_mode == "audio_first" or prefs.gemini_verify_captions) and not importlib.util.find_spec("faster_whisper"):
+                raise ValueError('Transcription is not installed. Run: pip install -e ".[transcribe]"')
             if not prefs.f1_enabled:
                 raise ValueError("Feature 1 is paused. Enable F1 in the dashboard before submitting a video.")
-            self.cfg.check_ai(prefs.ai_provider, prefs.ai_model)
+            if prefs.clipping_mode == "audio_first":
+                self.cfg.check_ai(prefs.ai_provider, prefs.ai_model)
             attachment = update.message.video or update.message.document
             if attachment:
+                if prefs.clipping_mode == "gemini_browser":
+                    raise ValueError("Clipping using Gemini takes YouTube links. Select Audio-first clipping for uploads.")
                 if not attachment.file_size or attachment.file_size > 20 * 1024**2:
                     raise ValueError("Telegram cloud bots can download uploads up to 20 MB. Send a video link for larger videos.")
                 job = self.store.create(owner, chat, "telegram-upload", prefs, self.cfg.max_active_jobs, "uploading")
@@ -400,8 +410,11 @@ class Controller:
                 self.store.update(job["id"], source=str(path.resolve()), state="queued_analysis")
             else:
                 url = (update.message.text or "").strip()
-                if url.startswith("/clip "):
-                    url = url[6:].strip()
+                if command in {"/clip", "/geminiclip"}:
+                    url = url.split(maxsplit=1)[1].strip() if len(url.split(maxsplit=1)) == 2 else ""
+                if prefs.clipping_mode == "gemini_browser":
+                    from .gemini_clipping import youtube_url
+                    url = youtube_url(url)
                 validate_url(url, self.cfg)
                 job = self.store.create(owner, chat, url, prefs, self.cfg.max_active_jobs)
             await update.message.reply_text(f"🎬 Queued · {job['id']}\nI’ll send the shortlist when it’s ready.\n"
@@ -430,6 +443,7 @@ class Controller:
     async def start(self, app):
         self.app = app
         await app.bot.set_my_commands([BotCommand("start", "Open your clip studio"),
+                                      BotCommand("geminiclip", "Clip a YouTube link using Gemini website"),
                                       BotCommand("settings", "Editing defaults"), BotCommand("jobs", "Recent jobs"),
                                       BotCommand("status", "Job progress"), BotCommand("whoami", "Your user ID"),
                                       BotCommand("provider", "Switch ChatGPT browser, OpenAI, Grok or Gemini"),
@@ -463,7 +477,7 @@ class Controller:
         app = (Application.builder().token(self.cfg.token).post_init(self.start).post_stop(self.stop)
                .concurrent_updates(4).read_timeout(60).write_timeout(180).connect_timeout(30).build())
         app.add_handler(CommandHandler("whoami", self.whoami))
-        app.add_handler(CommandHandler("clip", self.submit))
+        app.add_handler(CommandHandler(["clip", "geminiclip"], self.submit))
         app.add_handler(CommandHandler(["start", "help", "jobs", "settings", "provider", "clips", "length", "style",
                                         "captions", "reframe", "language", "resolution", "auto", "status",
                                         "cancel", "retry", "render", "export", "cleanup", "autopublish", "music",

@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from itertools import pairwise
 
 from .config import Config
+from .editorial import CLIP_BRIEF, attention_report, boundaries, choose_hook
 from .models import Analysis, Clip, Preferences, Proposal, Ratings, Transcript
 from .providers import editorial_client
 
@@ -25,7 +26,7 @@ For EACH clip return music_category as exactly one of: cinematic_epic (powerful/
 emotional_sad (touching/melancholic), suspense_thriller (mystery/tension), energetic_hype
 (fast/exciting), chill_ambient (calm/reflective). Also return a natural Instagram caption and
 at most five relevant hashtags in the hashtags array. Do not put hashtags in caption.
-"""
+""" + CLIP_BRIEF
 
 
 def lines(transcript: Transcript) -> list[str]:
@@ -58,6 +59,7 @@ def validate_proposals(proposals: list[Proposal], transcript: Transcript, prefs:
             continue
         segments = transcript.segments[p.first_segment:p.last_segment + 1]
         start, end = segments[0].start, min(segments[-1].end, transcript.duration)
+        start, end = boundaries(segments, start, end, prefs)
         if not prefs.min_seconds <= end - start <= prefs.max_seconds:
             continue
         # Reject long dead stretches in proposed clips; preserve all spoken content.
@@ -68,10 +70,13 @@ def validate_proposals(proposals: list[Proposal], transcript: Transcript, prefs:
         text = " ".join(s.text.strip() for s in segments)
         # Never present invented hook dialogue as a quotation.
         hook = p.hook_text if p.hook_text.casefold() in text[:400].casefold() else segments[0].text[:150]
-        valid.append(Clip(id=0, start=start, end=end, title=p.title, reason=p.reason,
+        title, variants = choose_hook(p.title, p.hook_variants, text)
+        report = attention_report(segments, start, end, title)
+        valid.append(Clip(id=0, start=start, end=end, title=title, reason=p.reason,
                           hook_text=hook, score=p.ratings.score(), ratings=p.ratings,
                           text=text, selection_method=method, music_category=p.music_category,
-                          caption=p.caption or p.title, hashtags=p.hashtags))
+                          caption=p.caption or title, hashtags=p.hashtags, hook_variants=variants,
+                          audience_value=p.audience_value, editorial=report))
     return valid
 
 
@@ -147,7 +152,7 @@ async def select(transcript: Transcript, prefs: Preferences, cfg: Config,
                     max_tokens=5000,
                     instructions=EDITOR,
                     prompt=f"Find up to {min(12, prefs.clips + 3)} clips, each {prefs.min_seconds}-"
-                    f"{prefs.max_seconds} seconds. Full-source context:\n{context}\nTRANSCRIPT:\n"
+                    f"{prefs.max_seconds} seconds. Preferred hook style: {prefs.hook_style}. Full-source context:\n{context}\nTRANSCRIPT:\n"
                     + "\n".join(text[i] for i in ids))
                 candidates.extend(p for p in response.clips
                                   if p.first_segment in ids and p.last_segment in ids)

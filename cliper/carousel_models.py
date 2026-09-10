@@ -41,9 +41,13 @@ class Calculation(Model):
         expr = re.sub(r"[$£€¥]", "", expr)
         expr = re.sub(r"/(?:month|week|day|year|yr|hr|hour|person|m|mo)\b", "", expr, flags=re.I)
         expr = re.sub(r"\bper\s+(?:month|week|day|year|yr|hr|hour|person|m|mo)\b", "", expr, flags=re.I)
+        expr = re.sub(r"\b(?:days?|weeks?|months?|years?|yrs?|hrs?|hours?|mins?|minutes?|dollars?|cents?)\b", "", expr, flags=re.I)
         expr = re.sub(r"(\d),(\d)", r"\1\2", expr)
         expr = re.sub(r"(\d+(?:\.\d+)?)\s*%", r"(\1/100)", expr)
         expr = expr.replace("^", "**")
+        m = re.match(r"^[\s\d\+\-\*\/\(\)\.\^]+", expr)
+        if m and any(c.isdigit() for c in m.group(0)):
+            expr = m.group(0).strip()
 
         try:
             tree = ast.parse(expr, mode="eval")
@@ -60,7 +64,10 @@ class Calculation(Model):
                 right = compute(node.right)
                 if isinstance(node.op, ast.Pow) and (abs(right) > 100 or abs(left) > 1e6):
                     raise ValueError("Calculation too large")
-                return ops[type(node.op)](left, right)
+                value = ops[type(node.op)](left, right)
+                if type(value) not in (int, float) or abs(value) > 1e15 or not math.isfinite(value):
+                    raise ValueError("Calculation intermediate must be a finite real number below 1e15")
+                return value
             if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
                 return -compute(node.operand)
             raise ValueError("Only numeric arithmetic is allowed")
@@ -78,7 +85,7 @@ class Idea(Model):
     topic: str = Field(min_length=3, max_length=160)
     pillar: str = Field(min_length=2, max_length=60)
     hook: str = Field(min_length=3, max_length=140)
-    angle: str = Field(min_length=10, max_length=1000)
+    angle: str = Field(min_length=10, max_length=2500)
     calculations: list[Calculation] = Field(default_factory=list, max_length=6)
     sources: list[str] = Field(default_factory=list, max_length=8)
     score: ContentScore
@@ -120,3 +127,4 @@ class ImageReview(Model):
     character_matches: bool
     composition_ok: bool
     issues: list[str] = Field(max_length=10)
+    observed_text: str = Field(default="", max_length=1000)

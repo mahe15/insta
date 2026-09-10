@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import shutil
 import sys
@@ -48,8 +49,8 @@ async def download(url: str, directory: Path, cfg: Config, cancelled) -> Path:
     # Ignore user/global yt-dlp configs and plugins; never interpolate user text into a shell.
     args = [sys.executable, "-m", "yt_dlp", "--ignore-config", "--no-plugin-dirs", "--no-playlist",
             "--playlist-items", "1",
-            "--no-progress", "--no-warnings", "--socket-timeout", "25", "--retries", "3",
-            "--extractor-retries", "2", "--max-filesize", f"{cfg.max_download_mb}M",
+            "--no-progress", "--no-warnings", "--socket-timeout", "45", "--retries", "3",
+            "--extractor-retries", "3", "--retry-sleep", "2", "--max-filesize", f"{cfg.max_download_mb}M",
             "--match-filters", f"duration <= {cfg.max_source_minutes * 60} & !is_live",
             "--format", "bv*[height<=1080]+ba/b[height<=1080]", "--merge-output-format", "mp4",
             "--ffmpeg-location", cfg.ffmpeg(), "--write-info-json", "--no-write-playlist-metafiles",
@@ -58,9 +59,8 @@ async def download(url: str, directory: Path, cfg: Config, cancelled) -> Path:
         args += ["--js-runtimes", "node"]
     elif shutil.which("deno"):
         args += ["--js-runtimes", "deno"]
-    else:
-        # YouTube frequently needs a JS runtime; doctor exposes this before live use.
-        pass
+    if any(h in url.lower() for h in ("youtube.com", "youtu.be")):
+        args += ["--extractor-args", "youtube:player_client=android,web"]
 
     def bounded():
         if cancelled():
@@ -101,6 +101,7 @@ async def transcribe(source: Path, directory: Path, prefs: Preferences, cfg: Con
     await run([sys.executable, "-m", "cliper.transcribe", str(audio), str(target),
                "--model", cfg.whisper_model, "--device", cfg.whisper_device,
                "--compute", cfg.whisper_compute, "--language", prefs.language,
+               "--beam-size", str(cfg.whisper_beam_size),
                "--device-index", str(cfg.gpu_device_index),
                "--cache", str(cfg.data_dir / "models")], timeout=14400, cancelled=cancelled)
     return Transcript.model_validate_json(target.read_text(encoding="utf-8"))
@@ -111,8 +112,14 @@ def filter_graph(prefs: Preferences, face: dict, subtitle: str, force_blur=False
     mode = prefs.reframe
     if prefs.layout == "square_hook":
         mode = "square_hook"
-        graph = (f"[0:v]scale={w}:{w}:force_original_aspect_ratio=increase,crop={w}:{w},"
-                 f"pad={w}:{h}:0:{(h - w) // 2}:color=black[framed];")
+        if prefs.smart_crop and prefs.preserve_wide_groups and face.get("square_mode") == "fit":
+            graph = (f"[0:v]scale={w}:{w}:force_original_aspect_ratio=decrease,"
+                     f"pad={w}:{w}:(ow-iw)/2:(oh-ih)/2:color=black,")
+        else:
+            expression = center_expression(face.get("square_centers", [])) if prefs.smart_crop else "0.5"
+            graph = (f"[0:v]scale={w}:{w}:force_original_aspect_ratio=increase,crop={w}:{w}:"
+                     f"x='max(0,min(iw-ow,iw*({expression})-ow/2))':y=(ih-oh)/2,")
+        graph += f"pad={w}:{h}:0:{(h - w) // 2}:color=black[framed];"
     elif force_blur or (mode == "auto" and not face.get("safe_crop")):
         mode = "blur"
     if mode == "square_hook":
@@ -142,23 +149,34 @@ async def quality_check(path: Path, clip: Clip, prefs: Preferences, cfg: Config,
         raise ValueError("Output duration does not match the edit plan")
     if path.stat().st_size >= 49_000_000:
         raise ValueError("Output exceeds the Telegram delivery budget")
-    # Decode the entire output, not just its container header.
+    # Inspect every frame. A sample cannot justify a 'full_decode' result.
     await run([cfg.ffmpeg(), "-v", "error", "-xerror", "-nostdin", "-i", str(path),
                "-f", "null", "-"], cancelled=cancelled, timeout=300)
     volume = await run([cfg.ffmpeg(), "-hide_banner", "-nostdin", "-i", str(path),
                         "-vn", "-af", "volumedetect", "-f", "null", "-"], cancelled=cancelled, timeout=120)
     match = re.search(r"max_volume: ([\-\w.]+) dB", volume)
-    if match and float(match[1]) < -55:
+    if not match:
+        raise ValueError("Output audio level could not be measured")
+    if float(match[1]) < -55:
         raise ValueError("Output audio is effectively silent")
-    return info | {"bytes": path.stat().st_size, "full_decode": "passed", "audio_level": "passed"}
+    from .quality import visual_report
+    visual = await asyncio.to_thread(visual_report, path, square=prefs.layout == "square_hook")
+    if visual["black_fraction"] >= .98:
+        raise ValueError("Output video content is effectively black")
+    return info | {"bytes": path.stat().st_size, "full_decode": "passed", "audio_level": "passed",
+                   "max_volume_db": float(match[1]), "visual": visual}
 
 
-def video_encoder_args(cfg: Config, bitrate: int) -> list[str]:
+def video_encoder_args(cfg: Config, bitrate: int, fast: bool = False) -> list[str]:
     if cfg.video_encoder == "h264_nvenc":
-        return ["-c:v", "h264_nvenc", "-gpu", str(cfg.gpu_device_index), "-preset", "p5", "-tune", "hq",
+        preset = "p1" if fast else "p5"
+        tune = "ll" if fast else "hq"
+        return ["-c:v", "h264_nvenc", "-gpu", str(cfg.gpu_device_index), "-preset", preset, "-tune", tune,
                 "-rc", "vbr", "-cq", "21", "-b:v", f"{bitrate}k"]
     if cfg.video_encoder == "libx264":
-        return ["-c:v", "libx264", "-threads", "4", "-preset", "fast", "-crf", "21"]
+        threads = "0" if fast else "4"
+        preset = "ultrafast" if fast else "fast"
+        return ["-c:v", "libx264", "-threads", threads, "-preset", preset, "-crf", "21"]
     raise ValueError("Unknown VIDEO_ENCODER; choose h264_nvenc or libx264")
 
 
@@ -167,7 +185,7 @@ async def render(source: Path, directory: Path, transcript: Transcript, clip: Cl
     directory.mkdir(parents=True, exist_ok=True)
     ass = write_captions(directory, transcript, clip, prefs)
     face_path = directory / f"clip_{clip.id:02}.vision.json"
-    if prefs.reframe == "auto" and prefs.layout == "legacy":
+    if prefs.reframe == "auto" and (prefs.layout == "legacy" or prefs.smart_crop):
         await run([sys.executable, "-m", "cliper.vision", str(source), str(clip.start), str(clip.end),
                    str(face_path)], cancelled=cancelled, timeout=300)
         face = json.loads(face_path.read_text(encoding="utf-8"))
@@ -195,14 +213,22 @@ async def render(source: Path, directory: Path, transcript: Transcript, clip: Cl
         graph, mode = filter_graph(prefs, face, ass.name, force_blur=bool(attempt))
         audio_map = ["-map", "0:a:0", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11"]
         if track:
-            graph += (";[0:a]loudnorm=I=-16:TP=-1.5:LRA=11[voice];"
-                      "[1:a]volume=0.20[music];[voice][music]amix=inputs=2:duration=first:"
+            graph += (";[0:a]loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000[voice];"
+                      f"[1:a]volume=0.20,afade=t=in:d=0.25,afade=t=out:st={max(0, length - .6):.3f}:d=0.6[music];")
+            if prefs.music_ducking:
+                graph += ("[voice]asplit=2[speech][side];[music][side]sidechaincompress="
+                          "threshold=0.025:ratio=6:attack=15:release=250:makeup=1[ducked];"
+                          "[speech][ducked]")
+            else:
+                graph += "[voice][music]"
+            graph += ("amix=inputs=2:duration=first:"
                       "dropout_transition=0:normalize=0,alimiter=limit=0.95:level=false[aout]")
             audio_map = ["-map", "[aout]"]
+        filter_threads = str(min(8, max(2, os.cpu_count() or 4)))
         await run([cfg.ffmpeg(), "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
                    "-ss", f"{clip.start:.3f}", "-i", str(source),
                    *(["-stream_loop", "-1", "-i", str(track)] if track else []), "-t", f"{length:.3f}",
-                   "-filter_complex_threads", "2", "-filter_complex", graph,
+                   "-filter_complex_threads", filter_threads, "-filter_complex", graph,
                    "-map", "[out]", *audio_map,
                    *video_encoder_args(cfg, bitrate),
                    "-maxrate", f"{bitrate}k", "-bufsize", f"{bitrate * 2}k",
@@ -217,10 +243,14 @@ async def render(source: Path, directory: Path, transcript: Transcript, clip: Cl
             bitrate = int(bitrate * .8)
             continue
         partial.replace(target)
+        from .quality import save_cover
+        await asyncio.to_thread(save_cover, target, target.with_suffix(".cover.jpg"), qa["visual"]["suggested_cover_seconds"])
         write_json(directory / f"clip_{clip.id:02}.json", {
             "clip": clip.model_dump(), "preferences": prefs.model_dump(), "render": {"layout": mode, "captions": prefs.captions,
-                                                 "style": prefs.style, "encoder": cfg.video_encoder}, "quality": qa,
-            "music": {"category": clip.music_category, "file": str(track) if track else None, "gain": .2},
+                                                 "style": prefs.style, "encoder": cfg.video_encoder,
+                                                 "preserve_wide_groups": prefs.preserve_wide_groups}, "quality": qa,
+            "music": {"category": clip.music_category, "file": str(track) if track else None, "gain": .2,
+                      "ducking": bool(track and prefs.music_ducking), "fades": bool(track)},
             "vision": face, "review_note": "Automated technical QA; editorial and face visibility review advised."})
         return target
     raise ValueError("Could not produce a valid export")

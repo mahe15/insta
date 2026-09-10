@@ -1,5 +1,19 @@
 # Local verification — 8 September 2026
 
+## Studio upgrade and Gemini clipping — September 10–11, 2026
+
+The latest changes add editorial checks, stronger carousel planning/QA and a link-first Gemini website clipping route. The final browser configuration retains the original shared project Chromium profile for ChatGPT, Feature 2 Gemini images and Gemini clipping. No Chrome remote-debugging setup is required or retained.
+
+- Final retained code: **152 tests passed in 54.79 seconds**, with Ruff and dependency checks passing. It includes actual local Chromium fixtures, actual FFmpeg media tests, simulated external AI/Instagram calls and a regression proving that all three website adapters share the original project profile and lock.
+- The actual RTX 4060 NVENC sample is `data/verification/studio-upgrade/clip_01.mp4`: **1080×1920**, **57.967 seconds**, **39,498,864 bytes**. Full decode and audio checks passed. The 116 sampled video-content frames contained no flagged black/static intervals. The filled-square layout, white title and captions were visually inspected using the saved cover JPEG. Category music at 20% gain, fades and speech ducking were enabled. This uses a cached user source/transcript and a manually curated title; it does not measure virality or new AI selection.
+- New automated cases cover hook grounding, valid edge trimming, caption confidence, cache invalidation, image/reference duplication, literal image-text checking, invalid arithmetic, upload cancellation, audio-only extraction, reviewed-asset hashes and publishing predecessor recovery.
+- Gemini clipping cases cover canonical YouTube URLs, source identity and duration bounds, absolute caption timestamps, invalid JSON content, transcript/word/currency consistency, duplicate ranges, no full-audio download, corrected-caption caching, local caption shifting, metadata-only extraction, export records and Telegram command routing without an API key. A real Chromium fixture verified completed JSON extraction with no file attachment, and explicit signed-out detection.
+- A live metadata-only extraction succeeded for the user's previously submitted YouTube URL. The subsequent live Gemini request stopped because the shared saved project profile displayed **Sign in**. No AI clip response or new Gemini clip was produced. The image-generation live check had the same session dependency; no new carousel artwork is claimed as live-validated. Current per-niche character paths exist locally.
+- Automatic approval review initially blocked opening a login window because its service reported a usage limit; a later retry was approved. The user clarified that the existing project Chromium implementation must be reused. That is the final configuration; the attempted alternative Chrome attachment implementation was removed.
+- No live Instagram post was published during these checks. Production publishing still depends on valid local credentials, media hosting and account availability.
+
+See `RESEARCH_AND_UPGRADE.md`, `UPGRADE_GUIDE.md` and `FEATURES.md` for evidence, controls, configuration and limits. Older verification entries below describe earlier snapshots and should not be read as the current browser or music-library state.
+
 Verified in this Windows workspace using the project's Python 3.12 virtual environment:
 
 - **36 automated tests passed** (`python -m pytest -q`, 7.35 seconds on the final run).

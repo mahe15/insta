@@ -16,6 +16,7 @@ def inspect(source: Path, start: float, end: float) -> dict:
     detector = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
     width, height = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     samples, scenes, previous = [], [], None
+    square_centers, wide_groups = [], 0
     try:
         t = start
         while t < end:
@@ -40,6 +41,17 @@ def inspect(source: Path, start: float, end: float) -> dict:
                 # Include a margin around the whole face, including when near a frame edge.
                 fits = bool(x >= left + 5 and x + w <= left + crop_width - 5)
             samples.append({"time": round(t - start, 2), "faces": len(faces), "center": center, "fits": fits})
+            square_center = .5
+            if len(faces):
+                left_face = min(x for x, y, w, h in faces)
+                right_face = max(x + w for x, y, w, h in faces)
+                square_center = float((left_face + right_face) / (2 * small.shape[1]))
+                if right_face - left_face + 30 > small.shape[0]:
+                    wide_groups += 1
+            # Reset at scene cuts rather than panning between unrelated shots.
+            if square_centers and round(t - start, 2) not in scenes:
+                square_center = .25 * square_center + .75 * square_centers[-1][1]
+            square_centers.append([round(t - start, 2), round(square_center, 4)])
             t += 1.0
     finally:
         cap.release()
@@ -55,6 +67,8 @@ def inspect(source: Path, start: float, end: float) -> dict:
             center = .65 * center + .35 * centers[-1][1]
         centers.append([group[0]["time"], round(center, 4)])
     return {"safe_crop": safe, "face_coverage": round(coverage, 3), "centers": centers,
+            "square_centers": square_centers, "square_mode": "fit" if wide_groups else "track",
+            "wide_face_group_samples": wide_groups,
             "scene_changes": scenes, "sample_count": len(samples), "width": width, "height": height}
 
 

@@ -13,18 +13,22 @@ from .process import run
 from .storage import write_json
 
 
-def arguments(url: str, cfg: Config, stem: str) -> list[str]:
+def arguments(url: str, cfg: Config, stem: str, filter_duration: bool = True) -> list[str]:
     validate_url(url, cfg)
     args = [sys.executable, "-m", "yt_dlp", "--ignore-config", "--no-plugin-dirs", "--no-playlist",
-            "--playlist-items", "1", "--no-progress", "--socket-timeout", "25", "--retries", "2",
-            "--match-filters",
-            f"duration <= {cfg.max_source_minutes * 60} & !is_live", "--ffmpeg-location", cfg.ffmpeg(),
-            "--write-info-json", "--no-write-playlist-metafiles", "--restrict-filenames",
-            "--output", stem + ".%(ext)s"]
+            "--playlist-items", "1", "--no-progress", "--socket-timeout", "45", "--retries", "3",
+            "--extractor-retries", "3", "--retry-sleep", "2"]
+    if filter_duration:
+        args += ["--match-filters", f"duration <= {cfg.max_source_minutes * 60} & !is_live"]
+    args += ["--ffmpeg-location", cfg.ffmpeg(),
+             "--write-info-json", "--no-write-playlist-metafiles", "--restrict-filenames",
+             "--output", stem + ".%(ext)s"]
     for runtime in ("node", "deno"):
         if shutil.which(runtime):
             args += ["--js-runtimes", runtime]
             break
+    if any(h in url.lower() for h in ("youtube.com", "youtu.be")):
+        args += ["--extractor-args", "youtube:player_client=android,web"]
     return args
 
 
@@ -44,7 +48,7 @@ async def execute(args, directory, cfg, cancelled, timeout: int = 600):
 
 async def audio(url: str, directory: Path, cfg: Config, cancelled) -> tuple[Path, dict]:
     args = arguments(url, cfg, "audio-source") + ["--max-filesize", f"{cfg.max_download_mb}M",
-                                                "--format", "bestaudio", "--", url]
+                                                "--format", "bestaudio/best", "--", url]
     await execute(args, directory, cfg, cancelled)
     info_path = directory / "audio-source.info.json"
     if not info_path.is_file():
@@ -53,10 +57,26 @@ async def audio(url: str, directory: Path, cfg: Config, cancelled) -> tuple[Path
     duration = float(info.get("duration") or 0)
     if not math.isfinite(duration) or not 0 < duration <= cfg.max_source_minutes * 60 or info.get("is_live"):
         raise ValueError("Source duration is missing, live, or exceeds the configured limit")
-    files = [p for p in directory.glob("audio-source.*") if p.suffix in {".m4a", ".webm", ".mp3", ".opus", ".ogg", ".aac", ".wav", ".flac"}]
-    if len(files) != 1:
-        raise ValueError("No unambiguous audio-only source was downloaded")
+    files = [p for p in directory.glob("audio-source.*") if p.suffix in {".m4a", ".webm", ".mp3", ".opus", ".ogg", ".aac", ".wav", ".flac", ".mp4", ".mkv"}]
+    if not files:
+        raise ValueError("No unambiguous audio source was downloaded")
     return files[0].resolve(), {"duration": duration, "audio": True, "title": info.get("title", "Video")}
+
+
+async def metadata(url: str, directory: Path, cfg: Config, cancelled) -> dict:
+    """Read extractor metadata without downloading video or audio streams."""
+    (directory / "source.info.json").unlink(missing_ok=True)
+    await execute(arguments(url, cfg, "source", filter_duration=False) + ["--skip-download", "--", url], directory, cfg, cancelled)
+    path = directory / "source.info.json"
+    if not path.is_file():
+        raise ValueError("YouTube metadata is unavailable. Check that the video is public and accessible.")
+    info = json.loads(path.read_text("utf-8"))
+    duration = float(info.get("duration") or 0)
+    if not math.isfinite(duration) or duration <= 0 or info.get("is_live"):
+        raise ValueError("Source is live or missing its duration")
+    if duration > cfg.max_source_minutes * 60:
+        raise ValueError(f"Source duration ({round(duration / 60, 1)}m) exceeds MAX_SOURCE_MINUTES ({cfg.max_source_minutes}m). Set MAX_SOURCE_MINUTES={math.ceil(duration / 60)} in your .env to process this video.")
+    return {"duration": duration, "title": info.get("title", "Video"), "id": info.get("id"), "audio": True}
 
 
 async def section(url: str, directory: Path, start: float, end: float, cfg: Config, cancelled) -> Path:
@@ -68,6 +88,9 @@ async def section(url: str, directory: Path, start: float, end: float, cfg: Conf
         cached = directory / "range.mp4"
         if cached.exists() and abs((await probe(cached, cfg, cancelled))["duration"] - (end - start)) <= .65:
             return cached
+    # A skipped/failed extraction must not relabel an old range as the new request.
+    for extension in ("mp4", "webm", "mkv", "mov"):
+        (directory / f"range.{extension}").unlink(missing_ok=True)
     # The extractor's filesize describes the entire source, not the selected range.
     # execute() bounds the actual range download on disk instead.
     args = arguments(url, cfg, "range") + [
@@ -76,7 +99,7 @@ async def section(url: str, directory: Path, start: float, end: float, cfg: Conf
         "--download-sections", f"*{start:.3f}-{end:.3f}", "--force-keyframes-at-cuts",
         "--force-overwrites",
         "--downloader-args", "ffmpeg_i:-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -timeout 15000000",
-        "--downloader-args", "ffmpeg_o:" + " ".join(video_encoder_args(cfg, 6500) + ["-c:a", "aac"]),
+        "--downloader-args", "ffmpeg_o:" + " ".join(video_encoder_args(cfg, 6500, fast=True) + ["-c:a", "aac"]),
         "--", url]
     await execute(args, directory, cfg, cancelled)
     source = directory / "range.mp4"

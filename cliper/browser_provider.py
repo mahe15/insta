@@ -12,8 +12,8 @@ import re
 import time
 import uuid
 
-from filelock import FileLock, Timeout
 import json_repair
+from filelock import FileLock, Timeout
 from pydantic import Field, ValidationError
 
 from .config import Config
@@ -73,6 +73,8 @@ def parse_result(raw: str, request_id: str, result_type):
         if not (content.startswith("{") and content.endswith("}")):
             raise ValueError("Expected one JSON object")
 
+    content = re.sub(r'\.replace\([^)]*\)', '', content)
+
     def unique(pairs):
         result = {}
         for key, value in pairs:
@@ -95,11 +97,15 @@ def parse_result(raw: str, request_id: str, result_type):
     if not isinstance(value, dict):
         raise ValueError("Expected a JSON object")
 
-    if "result" in value:
-        if value.get("request_id") != request_id:
+    req_raw = str(value.get("request_id", "")).strip()
+    req_clean = re.sub(r"[\s-]+", "", req_raw)
+    expected_clean = re.sub(r"[\s-]+", "", request_id)
+
+    if "result" in value and isinstance(value["result"], dict):
+        if req_raw and req_clean != expected_clean:
             raise ValueError("Response does not match the current request")
         target = value["result"]
-    elif value.get("request_id") == request_id:
+    elif not req_raw or req_clean == expected_clean:
         target = {k: v for k, v in value.items() if k != "request_id"}
     else:
         raise ValueError("Response does not match the current request")
@@ -143,8 +149,9 @@ class BrowserEditorialClient:
                 user_data_dir=str(self.profile), headless=self.cfg.browser_headless,
                 viewport={"width": 1280, "height": 900}, accept_downloads=self.accept_downloads,
                 locale="en-US", timeout=30000,
-                args=["--disable-blink-features=AutomationControlled"],
-                ignore_default_args=["--enable-automation"])
+                ignore_default_args=["--enable-automation"],
+                # Some local networks fail Google's QUIC transport; use normal HTTPS over TCP.
+                args=["--disable-quic", "--disable-blink-features=AutomationControlled"])
             self.context.set_default_timeout(15000)
             return self
         except BaseException:
@@ -352,6 +359,8 @@ async def login(cfg: Config):
             await extra.close()
         await page.goto(URL, wait_until="domcontentloaded", timeout=45000)
         print("Sign in or verify ChatGPT in the Chromium window.\n"
+              "Tip: If you use a Google account, sign in using Email + Password (or use 'Forgot password' on OpenAI to set one)\n"
+              "to bypass Google's automated browser restriction.\n"
               "When ready, CLOSE THE BROWSER WINDOW to save the session and finish.", flush=True)
         while client.context.pages:
             await asyncio.sleep(.5)

@@ -19,9 +19,12 @@ from telegram import InlineKeyboardButton as Button
 from telegram import InlineKeyboardMarkup as Keyboard
 from telegram import InputMediaPhoto
 
+from .cache import CAROUSEL_VERSION, digest
 from .carousel import render_slide
 from .carousel_models import CarouselPlan, ContentReview, Ideas
 from .controls import NICHES
+from .creative import BLUEPRINTS, CAROUSEL_BRIEF, plan_audit, slide_prompt, text_matches
+from .editorial import similarity, tokens
 from .gemini_images import GeminiImages
 from .models import Preferences
 from .providers import ScopedEditorialClient
@@ -38,7 +41,7 @@ Score honestly; reserve 90+ for outstanding hooks, share/save value, originality
 The first slide hooks attention, middle slides develop one idea, and the last slide delivers a clear CTA.
 Captions must be natural and contain no hashtags; put no more than five in the hashtags array.
 Gemini will render all artwork AND exact slide text. Keep each slide's text brief, readable and well-spaced.
-"""
+""" + CAROUSEL_BRIEF
 
 
 def niche_config(key):
@@ -250,6 +253,7 @@ class FacelessWorker:
     async def process(self, job):
         config = niche_config(job["niche"])
         brand = {k: v for k, v in config.items() if k not in {"character_path", "instagram_account"}}
+        brand["series_direction"] = BLUEPRINTS.get(job["niche"], {})
         reference = Path(config["character_path"])
         reference_hash = hashlib.sha256(reference.read_bytes()).hexdigest()
         prefs = Preferences.model_validate_json(job["prefs"])
@@ -281,7 +285,9 @@ class FacelessWorker:
                     seen.update(re.sub(r"\W", "", i.hook.lower()) for i in pool)
                     for idea in batch.ideas:
                         key = re.sub(r"\W", "", idea.hook.lower())
-                        if key not in seen:
+                        repeated = any(len(tokens(old["hook"])) >= 5 and similarity(idea.hook, old["hook"]) > .9
+                                       for old in history)
+                        if key not in seen and not repeated:
                             pool.append(idea)
                             seen.add(key)
                             if len(pool) == target:
@@ -292,14 +298,29 @@ class FacelessWorker:
                 eligible = sorted((i for i in pool if i.score.total() >= config["threshold"]), key=lambda i: i.score.total(), reverse=True)
                 if len(eligible) < job["count"]:
                     raise ValueError("Too few ideas passed the content score threshold. No images generated; retry for new ideas.")
-                selected = [i.model_dump() for i in eligible[:job["count"]]]
+                # Prefer diverse pillars when scores are close; do not fill a batch with the same lesson.
+                diversified = []
+                while eligible and len(diversified) < job["count"]:
+                    used = [i.pillar.casefold() for i in diversified]
+                    winner = max(eligible, key=lambda i: i.score.total() - 3 * used.count(i.pillar.casefold()))
+                    diversified.append(winner)
+                    eligible.remove(winner)
+                selected = [i.model_dump() for i in diversified]
                 write_json(manifest, selected)
             for index, idea in enumerate(selected, 1):
                 item = folder / f"post_{index:03}"
                 item.mkdir(exist_ok=True)
+                origin = f"f2:{job['id']}:{index}"
+                with self.c.store.connect() as db:
+                    existing = db.execute("SELECT id FROM publications WHERE owner=? AND origin=?", (job["owner"], origin)).fetchone()
+                if existing and (item / "delivered.json").exists():
+                    continue
                 plan_file = item / "plan.json"
                 review_file = item / "content-review.json"
-                if plan_file.exists() and review_file.exists():
+                production_key = digest({"version": CAROUSEL_VERSION, "brand": brand, "idea": idea})
+                cache_file = item / "production.json"
+                cache_valid = cache_file.exists() and json.loads(cache_file.read_text("utf-8")).get("key") == production_key
+                if plan_file.exists() and review_file.exists() and cache_valid:
                     plan = CarouselPlan.model_validate_json(plan_file.read_text("utf-8"))
                     review = ContentReview.model_validate_json(review_file.read_text("utf-8"))
                 else:
@@ -310,11 +331,26 @@ class FacelessWorker:
                         "Check facts, arithmetic, hook, payoff, repetition, usefulness, brand and audience fit. "
                         "List material issues and only approve if none remain.", "plan": plan.model_dump(),
                         "brand": brand, "previous": history}, ensure_ascii=False), ContentReview, 3000)
+                    local = plan_audit(plan, history)
+                    if local["errors"] or not review.approved or review.issues or review.score.total() < config["threshold"]:
+                        write_json(item / "plan_attempt_1.json", plan.model_dump())
+                        plan = await ai.structured(EDITOR, json.dumps({"task": "Rewrite the plan to resolve all review issues. "
+                            "Keep only supported claims and deliver a specific useful payoff.", "plan": plan.model_dump(),
+                            "local_issues": local, "editor_review": review.model_dump(), "brand": brand,
+                            "previous": history}, ensure_ascii=False), CarouselPlan, 6500)
+                        review = await ai.structured(EDITOR, json.dumps({"task": "Independently review this revised plan. "
+                            "Only approve if all material issues are resolved.", "plan": plan.model_dump(),
+                            "brand": brand, "previous": history}, ensure_ascii=False), ContentReview, 3000)
                     write_json(item / "plan_attempt.json", plan.model_dump())
                     write_json(item / "review_attempt.json", review.model_dump())
                     if review.approved and not review.issues and review.score.total() >= config["threshold"]:
                         write_json(plan_file, plan.model_dump())
                         write_json(review_file, review.model_dump())
+                        write_json(cache_file, {"key": production_key})
+                local = plan_audit(plan, history)
+                write_json(item / "local-content-qa.json", local)
+                if local["errors"]:
+                    raise ValueError("Carousel failed local pre-image checks: " + "; ".join(local["errors"][:3]))
                 if not review.approved or review.issues or review.score.total() < config["threshold"]:
                     reasons = []
                     if not review.approved:
@@ -334,32 +370,48 @@ class FacelessWorker:
                     for n, slide in enumerate(plan.slides, 1):
                         await self.notify(job, f"Carousel {index}: generating/checking slide {n}/{len(plan.slides)} with character reference")
                         raw, final, qa_file = item / f"raw_{n}.png", item / f"slide_{n}.jpg", item / f"qa_{n}.json"
-                        fingerprint = hashlib.sha256((reference_hash + slide.model_dump_json()).encode()).hexdigest()
+                        fingerprint = digest({"production": production_key, "reference": reference_hash,
+                                              "plan": plan.model_dump(), "index": n, "qa_enabled": not self.c.cfg.skip_image_qa})
                         if final.exists() and qa_file.exists() and json.loads(qa_file.read_text("utf-8")).get("fingerprint") == fingerprint:
+                            from .carousel import inspect_image
+                            inspect_image(final)
                             finals.append(final)
                             continue
-                        prompt = ("Generate ONE finished Instagram carousel image now, 1080x1350, portrait 4:5. "
-                                  "The uploaded image is the CHARACTER REFERENCE: preserve this exact character's face, "
-                                  "hair, distinctive features and identity while adapting clothing/pose to the environment. "
-                                  "Create original cinematic anime realism, high detail, dramatic lighting, strong contrast. "
-                                  "You must render the full design AND all typography. Keep text at least 100px from edges; "
-                                  "reserve bottom-right 250x100px for our swipe marker. No watermark or copied branding. "
-                                  "Render EXACTLY this readable text: " + json.dumps(slide.text) + "\nBRAND: "
-                                  + json.dumps(brand, ensure_ascii=False) + "\nSCENE: " + slide.model_dump_json())
-                        await gemini.generate(reference, prompt, raw)
-                        if not getattr(self.c.cfg, "skip_image_qa", True):
-                            visual = await gemini.review(reference, raw, slide.text)
-                            if not (visual.text_matches and visual.character_matches and visual.composition_ok) or visual.issues:
-                                write_json(item / f"rejected_{n}.json", visual.model_dump())
-                                raise ValueError(f"Gemini visual QA rejected slide {n}; it will not be published. Retry to regenerate.")
-                            visual_data = visual.model_dump()
-                        else:
-                            visual_data = {"text_matches": True, "character_matches": True, "composition_ok": True, "issues": []}
+                        feedback = []
+                        for image_attempt in range(2):
+                            prompt = slide_prompt(plan, slide, n, brand, job["niche"], feedback)
+                            await gemini.generate(reference, prompt, raw)
+                            from .carousel import compare_images
+                            technical_errors = []
+                            if compare_images(raw, reference)["near_duplicate"]:
+                                technical_errors.append("Output reproduces the character reference instead of a new slide")
+                            for previous in range(1, n):
+                                if compare_images(raw, item / f"raw_{previous}.png")["near_duplicate"]:
+                                    technical_errors.append("Output duplicates an earlier slide; change the scene and typography")
+                                    break
+                            if not self.c.cfg.skip_image_qa:
+                                visual = await gemini.review(reference, raw, slide.text)
+                                visual_data = visual.model_dump() | {"status": "checked", "method": "Gemini visual review"}
+                                feedback = list(visual.issues) + technical_errors
+                                if not text_matches(visual.observed_text, slide.text):
+                                    feedback.append("Transcribed visible text does not exactly match the intended words and numbers")
+                                if not (visual.text_matches and visual.character_matches and visual.composition_ok):
+                                    feedback.append("Correct spelling, character identity and composition to match the brief")
+                            else:
+                                visual_data = {"status": "skipped", "method": "manual review required"}
+                                feedback = technical_errors
+                            if not feedback:
+                                break
+                            write_json(item / f"rejected_{n}_{image_attempt + 1}.json", {"issues": feedback})
+                        if feedback:
+                            raise ValueError(f"Slide {n} failed image QA after two attempts; no publication was queued")
                         technical = await render_slide(raw, final, self.c.cfg, last=n == len(plan.slides))
                         write_json(qa_file, {"fingerprint": fingerprint, "visual": visual_data, "technical": technical})
                         finals.append(final)
                 current = self.c.store.prefs(job["owner"])
-                auto = prefs.f2_auto_publish and current.f2_auto_publish
+                from .carousel import contact_sheet
+                await asyncio.to_thread(contact_sheet, finals, item / "contact-sheet.jpg")
+                auto = prefs.f2_auto_publish and current.f2_auto_publish and not self.c.cfg.skip_image_qa
                 predecessor = None
                 if auto:
                     with self.c.store.connect() as db:
@@ -369,7 +421,8 @@ class FacelessWorker:
                         predecessor = prev[0] if prev else None
                 post = self.controls.publications.add(job["owner"], job["chat"], origin, "f2", config["instagram_account"],
                     finals, plan.caption, plan.hashtags, auto=auto, predecessor=predecessor, gap=10800 if predecessor else 0,
-                    niche=job["niche"], due=job.get("publish_at") if auto else None)
+                    niche=job["niche"], due=job.get("publish_at") if auto else None,
+                    review_note="Image QA was skipped; inspect every slide before approving." if self.c.cfg.skip_image_qa else "")
                 if not (item / "delivered.json").exists():
                     with ExitStack() as stack:
                         media = [InputMediaPhoto(stack.enter_context(path.open("rb")), caption=plan.caption[:1000] if n == 0 else None)

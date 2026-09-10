@@ -206,7 +206,7 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("bot", help="Start Telegram polling and the persistent worker")
     sub.add_parser("browser-login", help="Open CLIPER's Chromium profile for manual ChatGPT login")
-    sub.add_parser("gemini-login", help="Open the separate Gemini profile for manual image-generation login")
+    sub.add_parser("gemini-login", help="Verify Gemini in the configured shared browser session")
     server = sub.add_parser("serve-media", help="Serve only staged Instagram media behind your HTTPS reverse proxy")
     server.add_argument("--host", default="127.0.0.1")
     server.add_argument("--port", type=int, default=8787)

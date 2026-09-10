@@ -13,6 +13,7 @@ class Word(Model):
     start: float = Field(ge=0)
     end: float = Field(ge=0)
     text: str
+    confidence: float | None = Field(default=None, ge=0, le=1)
 
 
 class Segment(Model):
@@ -44,6 +45,8 @@ class Transcript(Model):
 
 
 class Preferences(Model):
+    clipping_mode: Literal["audio_first", "gemini_browser"] = "audio_first"
+    gemini_verify_captions: bool = True
     ai_provider: Literal["openai", "xai", "gemini", "chatgpt_browser", "heuristic"] | None = None
     ai_model: str | None = None
     clips: int = Field(default=5, ge=1, le=10)
@@ -57,6 +60,11 @@ class Preferences(Model):
     auto_render: bool = False
     layout: Literal["square_hook", "legacy"] = "square_hook"
     music: bool = True
+    music_ducking: bool = True
+    smart_crop: bool = True
+    preserve_wide_groups: bool = False
+    trim_edges: bool = True
+    hook_style: Literal["auto", "curiosity", "contrast", "direct"] = "auto"
     auto_publish: bool = False
     instagram_account: str = "clips"
     f1_enabled: bool = True
@@ -95,6 +103,8 @@ class Proposal(Model):
     music_category: Literal["cinematic_epic", "emotional_sad", "suspense_thriller", "energetic_hype", "chill_ambient"] = "chill_ambient"
     caption: str = Field(default="", max_length=1800)
     hashtags: list[str] = Field(default_factory=list, max_length=5)
+    hook_variants: list[str] = Field(default_factory=list, max_length=3)
+    audience_value: str = Field(default="", max_length=300)
 
 
 class Proposals(Model):
@@ -115,6 +125,9 @@ class Clip(Model):
     music_category: Literal["cinematic_epic", "emotional_sad", "suspense_thriller", "energetic_hype", "chill_ambient"] = "chill_ambient"
     caption: str = ""
     hashtags: list[str] = Field(default_factory=list, max_length=5)
+    hook_variants: list[str] = Field(default_factory=list, max_length=3)
+    audience_value: str = ""
+    editorial: dict = Field(default_factory=dict)
 
 
 class Analysis(Model):

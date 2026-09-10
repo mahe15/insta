@@ -25,9 +25,14 @@ class Controls:
         text = (f"CLIPER control center · {p.active_feature.upper()}\n"
                 f"AI: {ai.provider}\nF1: square clips + hook title · music {'on' if p.music else 'off'}\n"
                 f"F1 publishing: {'automatic' if p.auto_publish else 'approve each clip'}\n"
+                f"Clipping: {'using Gemini website' if p.clipping_mode == 'gemini_browser' else 'audio-first'}\n"
                 f"F2 publishing: {'automatic' if p.f2_auto_publish else 'approve each carousel'}\n"
                 f"Selected niche: {NICHES.get(p.selected_niche, p.selected_niche)}")
         rows = [
+            [Button("Clipping using Gemini", callback_data="ui:clipmode:gemini_browser"),
+             Button("Audio-first clipping", callback_data="ui:clipmode:audio_first")],
+            [Button(f"Gemini: {'GPU caption correction' if p.gemini_verify_captions else 'fast captions / manual review'}",
+                    callback_data="ui:toggle:gemini_verify_captions")],
             [Button("F1 · Clips", callback_data="ui:mode:f1"), Button("F2 · Carousels", callback_data="ui:mode:f2"),
              Button("Together", callback_data="ui:mode:both")],
             [Button(f"F1 {'ON' if p.f1_enabled else 'OFF'}", callback_data="ui:toggle:f1_enabled"),
@@ -62,12 +67,17 @@ class Controls:
                 return
             action = parts[1]
             p = self.c.store.prefs(owner)
-            if action == "mode":
+            if action == "clipmode":
+                p = Preferences.model_validate(p.model_dump() | {"clipping_mode": parts[2], "f1_enabled": True})
+                await q.message.reply_text("Send a YouTube video link. Gemini website mode needs its saved login; "
+                    "it downloads only selected ranges. Fast captions require review before publishing."
+                    if p.clipping_mode == "gemini_browser" else "Audio-first clipping selected. Send a video link or upload.")
+            elif action == "mode":
                 p = Preferences.model_validate(p.model_dump() | {"active_feature": parts[2],
                     "f1_enabled": parts[2] in {"f1", "both"}, "f2_enabled": parts[2] in {"f2", "both"}})
             elif action == "toggle":
                 key = parts[2]
-                if key not in {"f1_enabled", "f2_enabled", "auto_publish", "f2_auto_publish", "music", "captions", "auto_render"}:
+                if key not in {"f1_enabled", "f2_enabled", "auto_publish", "f2_auto_publish", "music", "captions", "auto_render", "smart_crop", "music_ducking", "trim_edges", "preserve_wide_groups", "gemini_verify_captions"}:
                     raise ValueError("Unknown toggle")
                 p = p.model_copy(update={key: not getattr(p, key)})
                 if key in {"auto_publish", "f2_auto_publish"} and not getattr(p, key):
@@ -101,17 +111,26 @@ class Controls:
                 for post in posts[:10]:
                     markup = self.publication_buttons(post)
                     await q.message.reply_text(f"{post['id']} · {post['feature']} · {post['account']} · {post['state']}\n"
-                                               f"{json.loads(post['payload'])['caption']}\n{post['error']}", reply_markup=markup)
+                                               f"{json.loads(post['payload'])['caption']}\n"
+                                               f"{json.loads(post['payload']).get('review_note', '')}\n{post['error']}", reply_markup=markup)
                 if not posts:
                     await q.message.reply_text("No publications yet. Generate a clip or carousel first.")
                 return
             elif action == "editing":
-                await q.message.reply_text("Choose clip count, length, resolution or automatic rendering.", reply_markup=Keyboard([
+                await q.message.reply_text("Choose clip count, duration, title style or editing controls. "
+                    "Use short clips for a single insight and longer clips when the story needs context.", reply_markup=Keyboard([
                     [Button(f"{n} clips", callback_data=f"ui:setting:clips:{n}") for n in (1, 3, 5, 10)],
                     [Button(f"{a}–{b}s", callback_data=f"ui:length:{a}:{b}") for a, b in ((15, 30), (30, 60), (60, 90))],
                     [Button(f"{n}p", callback_data=f"ui:setting:width:{n}") for n in (720, 1080)],
+                    [Button(f"Hook: {style}", callback_data=f"ui:hookstyle:{style}") for style in ("auto", "curiosity", "contrast", "direct")],
+                    [Button(f"Smart crop {'ON' if p.smart_crop else 'OFF'}", callback_data="ui:toggle:smart_crop"),
+                     Button(f"Music ducking {'ON' if p.music_ducking else 'OFF'}", callback_data="ui:toggle:music_ducking")],
+                    [Button(f"Trim silent edges {'ON' if p.trim_edges else 'OFF'}", callback_data="ui:toggle:trim_edges")],
+                    [Button(f"Fit wide groups {'ON' if p.preserve_wide_groups else 'OFF'}", callback_data="ui:toggle:preserve_wide_groups")],
                     [Button(f"Auto-render {'ON' if p.auto_render else 'OFF'}", callback_data="ui:toggle:auto_render")]]))
                 return
+            elif action == "hookstyle":
+                p = Preferences.model_validate(p.model_dump() | {"hook_style": parts[2]})
             elif action == "setting":
                 if parts[2] not in {"clips", "width"}:
                     raise ValueError("Unknown setting")
@@ -138,6 +157,37 @@ class Controls:
                     )
                 if not found:
                     await q.message.reply_text("No recent jobs.")
+                return
+            elif action in {"clipinfo", "hook"}:
+                from .editorial import hook_checks
+                from .models import Analysis
+                from .storage import write_json
+                job = self.c.store.get(parts[2], owner)
+                file = self.c.store.directory(job["id"]) / "analysis.json"
+                analysis = Analysis.model_validate_json(file.read_text("utf-8"))
+                clip = next((c for c in analysis.clips if c.id == int(parts[3])), None)
+                if not clip:
+                    raise ValueError("Clip not found")
+                if action == "hook":
+                    index = int(parts[4])
+                    if not 0 <= index < len(clip.hook_variants):
+                        raise ValueError("Hook option not found")
+                    with self.c.store.connect() as db:
+                        db.execute("BEGIN IMMEDIATE")
+                        state = db.execute("SELECT state FROM jobs WHERE id=? AND owner=?", (job["id"], owner)).fetchone()
+                        if not state or state[0] != "awaiting_selection":
+                            raise ValueError("Hook edits are available before rendering; submit a new job to re-edit")
+                        title = clip.hook_variants[index]
+                        if hook_checks(title, clip.text):
+                            raise ValueError("This hook fails local title checks; choose another option")
+                        clip.title = title
+                        write_json(file, analysis.model_dump())
+                report = clip.editorial
+                await q.message.reply_text(f"Clip {clip.id} · {clip.title}\n{clip.audience_value}\n"
+                    f"Speech: {report.get('words_per_minute', 'not measured')} words/min\n"
+                    f"Review: {', '.join(report.get('flags', [])) or 'No local flags'}\n\n{clip.text[:1800]}",
+                    reply_markup=Keyboard([[Button(f"Use: {title[:50]}",
+                        callback_data=f"ui:hook:{job['id']}:{clip.id}:{n}")] for n, title in enumerate(clip.hook_variants)]))
                 return
             elif action in {"job", "retry"}:
                 job = self.c.store.get(parts[2], owner)
@@ -185,6 +235,11 @@ class Controls:
                                  (job["owner"], f"{job['id']}:{selected[index-1]}")).fetchone()
                 predecessor = row[0] if row else None
         auto = p.auto_publish and self.c.store.prefs(job["owner"]).auto_publish
+        review_note = ""
+        if clip.editorial.get("automatic_ready") is False:
+            auto = False
+            review_note = "Local editorial checks require review: " + ", ".join(clip.editorial.get("flags", []))
         return self.publications.add(job["owner"], job["chat"], f"{job['id']}:{clip.id}", "f1", p.instagram_account,
                                      [path], clip.caption or clip.title, clip.hashtags, auto=auto,
-                                     predecessor=predecessor if auto else None, gap=7200 if auto and index else 0)
+                                     predecessor=predecessor if auto else None, gap=7200 if auto and index else 0,
+                                     review_note=review_note)

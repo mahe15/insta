@@ -31,7 +31,8 @@ def chunks(transcript: Transcript, clip: Clip) -> list[list[Word]]:
             word = Word(start=max(0, w.start - clip.start), end=min(clip.end, w.end) - clip.start,
                         text=w.text)
             if group and (len(group) >= 5 or sum(len(x.text) + 1 for x in group) + len(w.text) > 30
-                          or word.start - group[-1].end > .5):
+                          or word.start - group[-1].end > .5 or word.end - group[0].start > 2.5
+                          or re.search(r"[.!?。！？][\"'’”]*$", group[-1].text)):
                 groups.append(group)
                 group = []
             group.append(word)
@@ -83,7 +84,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 # Keep the phrase stationary; highlight the spoken word using real timestamps.
                 pieces = [f"{{\\1c{accent}}}{safe_ass(w.text)}{{\\1c&H00FFFFFF&}}" if j == i
                           else safe_ass(w.text) for j, w in enumerate(group)]
-                end = min(word.end + .12, group[i + 1].start) if i + 1 < len(group) else word.end
+                # Retain the phrase through short gaps; only the active word changes.
+                end = group[i + 1].start if i + 1 < len(group) else word.end
                 events.append(f"Dialogue: 0,{ass_time(word.start)},{ass_time(end)},Default,,0,0,0,,"
                               + " ".join(pieces))
     ass = directory / f"clip_{clip.id:02}.ass"

@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from . import media
+from .cache import export_identity
 from .config import Config
 from .models import Analysis, Clip, Preferences, Transcript
 from .process import JobCancelled
@@ -35,6 +36,9 @@ class Pipeline:
         cache = directory / "analysis.json"
         if cache.exists():
             return Analysis.model_validate_json(cache.read_text(encoding="utf-8"))
+        if prefs.clipping_mode == "gemini_browser":
+            from .gemini_clipping import analyze
+            return await analyze(source_input, directory, prefs, self.cfg, progress, cancelled)
         self.cfg.check_ai(prefs.ai_provider, prefs.ai_model)
         reference = directory / "source.json"
         if reference.exists():
@@ -80,38 +84,55 @@ class Pipeline:
         reference = json.loads((directory / "source.json").read_text(encoding="utf-8"))
         source = Path(reference["path"])
         transcript = Transcript.model_validate_json((directory / "transcript.json").read_text(encoding="utf-8"))
+        verified_transcript = None
+        if reference.get("kind") == "remote_gemini" and prefs.gemini_verify_captions:
+            from .gemini_clipping import verify_range
+            source, verified_transcript = await verify_range(reference, directory, clip, prefs, self.cfg, cancelled)
         output = directory / "clips" / f"clip_{clip.id:02}.mp4"
+        fingerprint = export_identity(reference, transcript, clip, prefs, self.cfg)
+        if verified_transcript is not None:
+            from .cache import digest
+            fingerprint = digest({"base": fingerprint, "corrected_transcript": verified_transcript.model_dump()})
         if output.exists():
             try:
                 metadata = json.loads(output.with_suffix(".json").read_text("utf-8"))
-                if metadata.get("preferences") != prefs.model_dump():
-                    raise ValueError("Editing preferences changed")
+                if metadata.get("fingerprint") != fingerprint:
+                    raise ValueError("Source, clip, renderer or editing settings changed")
                 await media.quality_check(output, clip, prefs, self.cfg, cancelled)
                 return output
             except (ValueError, RuntimeError, OSError, KeyError):
                 log.warning("Cached export failed validation; rendering again")
-        if reference.get("kind") == "remote_audio":
+        if reference.get("kind") in {"remote_audio", "remote_gemini"}:
             from .models import Segment, Word
             from .remote_media import section
-            source = await section(reference["url"], directory / "ranges" / f"clip_{clip.id:02}",
-                                   clip.start, clip.end, self.cfg, cancelled)
+            if verified_transcript is None:
+                source = await section(reference["url"], directory / "ranges" / f"clip_{clip.id:02}",
+                                       clip.start, clip.end, self.cfg, cancelled)
             original = clip
             segments = []
             for s in transcript.segments:
-                if s.start >= clip.start and s.end <= clip.end + .01:
-                    segments.append(Segment(start=max(0, s.start - clip.start), end=s.end - clip.start,
-                                            text=s.text, words=[Word(start=max(0, w.start - clip.start),
-                                            end=w.end - clip.start, text=w.text) for w in s.words]))
+                if s.end > clip.start and s.start < clip.end:
+                    words = [Word(start=max(0, w.start - clip.start), end=min(clip.end, w.end) - clip.start,
+                                  text=w.text, confidence=w.confidence) for w in s.words if w.end > clip.start and w.start < clip.end]
+                    segments.append(Segment(start=max(0, s.start - clip.start), end=min(clip.end, s.end) - clip.start,
+                                            text=s.text, words=words))
             transcript = Transcript(language=transcript.language, duration=clip.end - clip.start, segments=segments)
+            if verified_transcript is not None:
+                transcript = verified_transcript
             clip = clip.model_copy(update={"start": 0, "end": clip.end - clip.start})
             output = await media.render(source, directory / "clips", transcript, clip, prefs, self.cfg, cancelled)
             meta_path = output.with_suffix(".json")
             metadata = json.loads(meta_path.read_text("utf-8"))
             metadata["clip"] = original.model_dump()
             metadata["source_range"] = {"start": original.start, "end": original.end, "local_start": 0}
+            metadata["fingerprint"] = fingerprint
             write_json(meta_path, metadata)
             return output
-        return await media.render(source, directory / "clips", transcript, clip, prefs, self.cfg, cancelled)
+        output = await media.render(source, directory / "clips", transcript, clip, prefs, self.cfg, cancelled)
+        metadata = json.loads(output.with_suffix(".json").read_text("utf-8"))
+        metadata["fingerprint"] = fingerprint
+        write_json(output.with_suffix(".json"), metadata)
+        return output
 
 
 class Worker:
@@ -157,15 +178,34 @@ class Worker:
         clips = [c for c in analysis.clips if c.id in selected]
         if not clips:
             raise ValueError("No clips were selected")
-        for n, clip in enumerate(clips, 1):
-            if clip.id in delivered:
-                continue
-            await progress(f"Rendering and checking clip {n}/{len(clips)} · {clip.title}")
-            output = await self.pipeline.render_one(directory, clip, prefs, cancelled)
-            await progress(f"Sending clip {n}/{len(clips)}")
-            await self.deliver(job, clip, output)
-            delivered.append(clip.id)
+        delivery_task = None
+
+        async def deliver_and_record(clip_obj, out_path, clip_num, total_count):
+            await progress(f"Sending clip {clip_num}/{total_count}")
+            await self.deliver(job, clip_obj, out_path)
+            delivered.append(clip_obj.id)
             self.store.update(job_id, delivered=json.dumps(delivered))
+
+        try:
+            for n, clip in enumerate(clips, 1):
+                if clip.id in delivered:
+                    continue
+                if cancelled():
+                    raise JobCancelled()
+                await progress(f"Rendering and checking clip {n}/{len(clips)} · {clip.title}")
+                output = await self.pipeline.render_one(directory, clip, prefs, cancelled)
+                # Overlap one upload with rendering, but preserve publication/delivery order.
+                if delivery_task:
+                    await delivery_task
+                delivery_task = asyncio.create_task(deliver_and_record(clip, output, n, len(clips)))
+            if delivery_task:
+                await delivery_task
+        finally:
+            if delivery_task:
+                if not delivery_task.done():
+                    delivery_task.cancel()
+                await asyncio.gather(delivery_task, return_exceptions=True)
+
         if cancelled():
             raise JobCancelled()
         self.store.update(job_id, state="complete", stage=f"Delivered {len(clips)} clips")
