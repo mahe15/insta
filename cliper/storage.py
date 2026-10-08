@@ -81,10 +81,11 @@ class Store:
             return [dict(x) for x in db.execute(
                 "SELECT * FROM jobs WHERE owner=? ORDER BY created DESC LIMIT 10", (owner,))]
 
-    def claim(self) -> dict | None:
+    def claim(self, web_only=False) -> dict | None:
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
-            rows = db.execute("SELECT * FROM jobs WHERE state IN ('queued_analysis','queued_render') ORDER BY updated").fetchall()
+            rows = db.execute("SELECT * FROM jobs WHERE state IN ('queued_analysis','queued_render') "
+                              + ("AND chat=0 " if web_only else "") + "ORDER BY updated").fetchall()
             row = next((r for r in rows if self.prefs(r["owner"]).f1_enabled), None)
             if not row:
                 return None
@@ -101,12 +102,13 @@ class Store:
             if not result.rowcount:
                 raise ValueError("This job is not awaiting selection. Use /status to see its state.")
 
-    def recover(self):
+    def recover(self, web_only=False):
         with self.connect() as db:
-            db.execute("UPDATE jobs SET state='queued_analysis',stage='Resuming analysis' WHERE state='analyzing'")
-            db.execute("UPDATE jobs SET state='queued_render',stage='Resuming render' WHERE state='rendering'")
+            scope = " AND chat=0" if web_only else ""
+            db.execute("UPDATE jobs SET state='queued_analysis',stage='Resuming analysis' WHERE state='analyzing'" + scope)
+            db.execute("UPDATE jobs SET state='queued_render',stage='Resuming render' WHERE state='rendering'" + scope)
             db.execute("UPDATE jobs SET state='failed',error='Upload interrupted; please send it again' "
-                       "WHERE state='uploading'")
+                       "WHERE state='uploading'" + scope)
 
     def update_job_prefs(self, job_id: str, owner: int, prefs: Preferences):
         self.get(job_id, owner)

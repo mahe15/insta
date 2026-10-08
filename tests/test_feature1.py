@@ -24,11 +24,13 @@ def test_square_title_and_no_caption_switch(tmp_path, transcript, clip):
     assert clip.title in ass and "\\fnArial" in ass and "Dialogue: 0" not in ass
 
 
-async def test_audio_first_and_selected_range_relative_timestamps(cfg, transcript, clip, monkeypatch):
+async def test_legacy_audio_job_resumes_and_selected_range_relative_timestamps(cfg, transcript, clip, monkeypatch):
     folder = cfg.data_dir / "job"
     folder.mkdir()
     audio = folder / "audio.webm"
     audio.touch()
+    write_json(folder / "source.json", {"path": str(audio), "media": {"duration": 40},
+                                        "kind": "remote_audio", "url": "https://youtu.be/test"})
     selected = clip.model_copy(update={"start": 5, "end": 19})
     audio_mock = AsyncMock(return_value=(audio, {"duration": 40, "audio": True}))
     monkeypatch.setattr(remote_media, "audio", audio_mock)
@@ -39,7 +41,7 @@ async def test_audio_first_and_selected_range_relative_timestamps(cfg, transcrip
         title="test", language="en", duration=40, method="test", clips=[selected])))
     pipeline = Pipeline(cfg)
     await pipeline.analyze("https://youtu.be/test", folder, Preferences(), AsyncMock())
-    audio_mock.assert_awaited_once()
+    audio_mock.assert_not_awaited()
     write_json(folder / "transcript.json", transcript.model_dump())
     range_mock = AsyncMock(return_value=folder / "range.mp4")
     monkeypatch.setattr(remote_media, "section", range_mock)

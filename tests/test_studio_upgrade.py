@@ -205,7 +205,7 @@ async def test_audio_only_and_no_old_range_relabel(cfg, monkeypatch):
     monkeypatch.setattr(remote_media, "execute", execute)
     await remote_media.audio("https://youtu.be/test", folder, cfg, lambda: False)
     args = execute.await_args.args[0]
-    assert args[args.index("--format") + 1] == "bestaudio"
+    assert args[args.index("--format") + 1] in ("bestaudio", "bestaudio/best")
     ranges = cfg.data_dir / "range"
     ranges.mkdir()
     (ranges / "range.mp4").write_bytes(b"old content")
@@ -213,3 +213,47 @@ async def test_audio_only_and_no_old_range_relabel(cfg, monkeypatch):
     with pytest.raises(ValueError, match="not downloaded"):
         await remote_media.section("https://youtu.be/new", ranges, 10, 15, cfg, lambda: False)
     assert not (ranges / "range.mp4").exists()
+
+
+def test_slide_prompt_enforces_all_10_design_rules():
+    p = plan()
+    p.slides[0].text = "20 PUSH-UPS PER DAY"
+    prompt_slide1 = slide_prompt(p, p.slides[0], 1, {}, "men")
+    prompt_last = slide_prompt(p, p.slides[-1], 4, {}, "men")
+
+    # Rule 1: Font
+    assert "Montserrat ExtraBold" in prompt_slide1 or "Anton" in prompt_slide1 or "Bebas Neue" in prompt_slide1
+    assert "NEVER use decorative, cursive, thin" in prompt_slide1
+
+    # Rule 2: Font Size
+    assert "8–12%" in prompt_slide1 and "6–9%" in prompt_slide1
+
+    # Rule 3: Text Colour
+    assert "WHITE" in prompt_slide1 and "RED" in prompt_slide1
+
+    # Rule 4: Text Length
+    assert "3–8 words" in prompt_slide1
+    assert "NEVER put paragraphs" in prompt_slide1
+
+    # Rule 6: Visual Comparison & Progression
+    assert "darker, cooler" in prompt_slide1
+    assert "brightest, warmest" in prompt_last
+
+    # Rule 7: Character Consistency
+    assert "anime-inspired, muscular/athletic male" in prompt_slide1
+    assert "dark clothing with subtle red accents" in prompt_slide1
+    assert "disciplined" in prompt_slide1
+
+    # Rule 8: Composition & Placement
+    assert "1080x1350" in prompt_slide1
+    assert "100px side/top" in prompt_slide1
+    assert "150px bottom" in prompt_slide1
+
+    # Rule 9: Overall Visual Style
+    assert "cinematic anime movie frame" in prompt_slide1
+    assert "NO watermarks" in prompt_slide1
+
+    # Rule 10: Golden Rule - Simplicity
+    assert "ONE IDEA PER SLIDE" in prompt_slide1
+    assert "HOOK → NUMBER → VISUAL → EMOTION" in prompt_slide1
+

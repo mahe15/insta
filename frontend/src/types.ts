@@ -1,0 +1,231 @@
+export type Preferences = {
+  editorial_profile: string;
+  text_mode: string;
+  sound_effects: boolean;
+  sfx_gain: number;
+  reaction_zoom: boolean;
+  scan_minutes: number;
+  focus_times: number[];
+  music_gain: number;
+  music_normalize: boolean;
+  clipping_mode: string;
+  gemini_verify_captions: boolean;
+  ai_provider: string | null;
+  ai_model: string | null;
+  clips: number;
+  min_seconds: number;
+  max_seconds: number;
+  style: string;
+  captions: boolean;
+  reframe: string;
+  language: string;
+  width: number;
+  auto_render: boolean;
+  layout: string;
+  music: boolean;
+  music_ducking: boolean;
+  smart_crop: boolean;
+  preserve_wide_groups: boolean;
+  trim_edges: boolean;
+  hook_style: string;
+  auto_publish: boolean;
+  instagram_account: string;
+  youtube_auto_publish?: boolean;
+  youtube_account?: string;
+  f1_enabled: boolean;
+  f2_enabled: boolean;
+  active_feature: string;
+  f2_auto_publish: boolean;
+  selected_niche: string;
+  enabled_niches: string[];
+};
+export type Coverage = {
+  fraction?: number;
+  partial?: boolean;
+  analyzed_seconds?: number;
+  source_seconds?: number;
+  ranges?: { start: number; end: number; reason: string }[];
+};
+export type ClipPublication = {
+  id: string;
+  origin: string;
+  platform: string;
+  account: string;
+  state: string;
+  media_id?: string | null;
+  error?: string;
+  published_at?: number | null;
+};
+export type Clip = {
+  moment_type: string;
+  payoff_time: number | null;
+  id: number;
+  title: string;
+  start: number;
+  end: number;
+  score: number;
+  reason: string;
+  text: string;
+  hook_text: string;
+  hook_variants: string[];
+  music_category: string;
+  caption: string;
+  hashtags: string[];
+  ratings: Record<string, number>;
+  editorial: Record<string, unknown>;
+  video: string | null;
+  cover: string | null;
+  qa: Record<string, unknown> | null;
+  publications?: ClipPublication[];
+};
+export type Job = {
+  editorial_profile: string;
+  id: string;
+  title: string;
+  source: string;
+  state: string;
+  stage: string;
+  error: string;
+  created: number;
+  updated: number;
+  owner: number;
+  chat: number;
+  clip_count: number;
+  rendered: number;
+  cover: string | null;
+  duration: number | null;
+  coverage: Coverage;
+  provider: string;
+  analysis?: { title: string; clips: Clip[]; coverage: Coverage };
+  preferences?: Preferences;
+  selected?: number[];
+};
+export type System = {
+  engine: { mode: string; healthy: boolean; scope: string };
+  device: string;
+  encoder: string;
+  whisper_model: string;
+  compute_type: string;
+  free_gb: number;
+  total_gb: number;
+  face_model: boolean;
+  max_source_minutes: number;
+  long_source_minutes: number;
+  max_active_jobs: number;
+  max_download_mb: number;
+  scan_download_workers: number;
+  retention_days: number;
+  browser_profile: string;
+};
+export type Bootstrap = {
+  csrf: string;
+  owner: number;
+  default_provider: string;
+  preferences: Preferences;
+  platforms: Record<string, string[]>;
+  niches: Record<string, string>;
+  providers: { id: string; model: string; configured: boolean }[];
+  system: System;
+};
+export type Carousel = {
+  id: string;
+  niche: string;
+  count: number;
+  prompt?: string;
+  state: string;
+  stage: string;
+  error: string;
+  created: number;
+  items: {
+    name: string;
+    plan: {
+      topic?: string;
+      hook?: string;
+      caption?: string;
+      slides?: { text: string }[];
+    };
+    images: string[];
+    cover: string | null;
+  }[];
+};
+export type Niche = {
+  key: string;
+  label: string;
+  reference_ready: boolean;
+  config: {
+    name?: string;
+    brand?: string;
+    character_path?: string;
+    instagram_account?: string;
+    threshold?: number;
+    pillars?: string[];
+    banned_topics?: string[];
+    research_feeds?: string[];
+  };
+};
+export type Publication = {
+  id: string;
+  origin: string;
+  feature: string;
+  account: string;
+  state: string;
+  due: number;
+  created: number;
+  error: string;
+  published_at: number | null;
+  media_id: string | null;
+  predecessor: string | null;
+  gap: number;
+  caption: string;
+  automatic: boolean;
+  review_note: string;
+  platform?: "instagram" | "youtube";
+  media: { url: string; video: boolean }[];
+};
+export type Music = {
+  id: string;
+  name: string;
+  tracks: { name: string; bytes: number; url: string }[];
+};
+export type Connections = {
+  telegram_configured: boolean;
+  media_host_configured: boolean;
+  accounts: {
+    key: string;
+    ig_user_id: string;
+    login: string;
+    token_configured: boolean;
+    owner_allowed: boolean;
+  }[];
+};
+
+export type YouTubeAccount = {
+  key: string;
+  title: string;
+  channel_id: string;
+  privacy: "public" | "unlisted" | "private";
+  default_tags: string[];
+  thumbnail: string;
+  auto_publish: boolean;
+  owner_allowed: boolean;
+  authorized: boolean;
+};
+
+export type YouTubeConnections = {
+  configured: boolean;
+  client_id: string;
+  has_secret: boolean;
+  accounts: YouTubeAccount[];
+};
+
+export type PromptInfo = {
+  key: string;
+  title: string;
+  category: "carousels" | "clips" | "speed" | "x" | "display";
+  description: string;
+  default: string;
+  value: string;
+  is_custom: boolean;
+  variables: string[];
+  updated_at?: number;
+};

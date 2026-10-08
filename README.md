@@ -1,22 +1,30 @@
 # CLIPER
 
+**X Studio:** current-news research through your existing ChatGPT browser, English posts with real media, football plus five category desks, keyword requests, review and recurring schedules. Open **X Studio** in the sidebar. [Setup, research and browser-publishing limitations](X_STUDIO.md).
+
+**IShowSpeed Studio:** open **Speed Studio** in the web sidebar or send `/speedclip YOUTUBE_URL` for dedicated 6–60 second English clips with event-aware selection, restrained CC0 sound effects and reaction emphasis. Normal clipping now defaults to English-script captions and hooks (Hindi → Hinglish). [Feature guide and research](SPEED_STUDIO.md).
+
 **Your private Telegram clip studio, built in Python.** Send a long video, review a ranked shortlist, and receive captioned vertical clips.
+
+**New web Studio:** double-click `studio.bat` for the complete local workspace: clip review and editing, carousel creation, publishing approvals and schedules, category music, provider switching and engine controls. Open [the local studio](http://127.0.0.1:8788) while it is running. Read the [web setup and operating guide](WEB_STUDIO.md).
 
 **New: square clips with hook titles, category music, Instagram publishing and five-niche faceless carousels.** See [Feature 1 / Feature 2 setup and Telegram controls](FEATURES.md) for local account configuration, character images and scheduling.
 
 **Studio upgrade:** grounded hook alternatives, face-aware square cropping, caption timing correction, speech ducking, technical quality checks, stronger carousel scripts and image review, and safer publishing retries. Read the [research and evidence](RESEARCH_AND_UPGRADE.md) and [upgrade guide](UPGRADE_GUIDE.md).
+
+**Long-stream upgrade:** normal clipping accepts Kick, Twitch and ten other platform groups. Captions-first indexing and budgeted audio scans support sources up to 24 hours without requiring complete downloads/transcription. YuNet tracking, normalized BGM and resumable scan windows improve editing and efficiency. Read the [research, architecture and scan controls](LONG_STREAM_ARCHITECTURE.md). Partial scans can miss highlights.
 
 **Clipping using Gemini:** send `/geminiclip YOUTUBE_URL`, or select **Clipping using Gemini** in `/start` and paste a YouTube link. Gemini's saved Chromium session selects ranges, hooks and timed captions directly from the link. Only selected ranges are downloaded. No Gemini API key is used; website account limits apply. See [Gemini clipping setup and modes](FEATURES.md#clipping-using-gemini).
 
 ```text
 Telegram link / video upload
   → persistent SQLite queue
-  → audio-only download + source validation (video links)
-  → local faster-whisper transcription with word timestamps
-  → full-transcript context → candidate discovery → editorial critique
+  → metadata + caption index, or bounded audio-window downloads (video links)
+  → one local CUDA model load for missing discovery windows
+  → observed context → candidate discovery → editorial critique
   → duration validation + overlap / repeated-text removal
   → choose all, top 3, or custom clips
-  → download only selected video ranges
+  → download selected video ranges + correct word timestamps locally
   → square video on black vertical canvas + white hook title
   → FFmpeg captions + category music at 20% + NVENC H.264/AAC export
   → complete decode / resolution / duration / size / audio checks
@@ -66,7 +74,7 @@ To process a real local video with local transcription and basic ranking, set `A
 .\.venv\Scripts\python.exe -m cliper run 'C:\Videos\podcast.mp4' --clips 5 --min-seconds 30 --max-seconds 60
 ```
 
-For stronger contextual selection, choose OpenAI, xAI Grok, or Google Gemini with the matching API key. All three use the full context, candidate discovery and editorial critique pipeline. There is no automatic provider fallback when a call fails.
+For stronger contextual selection, choose OpenAI, xAI Grok, or Google Gemini with the matching API key. All three use available transcript context, candidate discovery and editorial critique. Long-stream analysis reports the ranges it examined. There is no automatic provider fallback when a call fails.
 
 ## Switch AI providers
 
@@ -193,6 +201,9 @@ Each new transcription writes `transcript.runtime.json` with the actual device a
 | `/start`, `/help` | Open the studio and command help |
 | `/whoami` | Show your numeric Telegram user ID |
 | Send URL or `/clip URL` | Queue a supported source |
+| `/platforms` | Supported public video/VOD platforms and limitations |
+| `/scan 24` | Discovery budget for long sources, 6–1440 minutes |
+| `/focus 01:20:00 08:10:00` | Prioritize known timestamps; `/focus clear` resets |
 | Send video / video document | Process an upload up to the cloud download limit |
 | `/jobs` | Last 10 jobs |
 | `/status JOB` | Current stage; reopen a waiting shortlist |
@@ -220,18 +231,18 @@ Each new transcription writes `transcript.runtime.json` with the actual device a
 
 Settings are saved per owner, and each job takes a snapshot when submitted. A shortlist may contain fewer clips than requested if the source lacks enough distinct, complete moments. Use a wider length range for difficult sources.
 
-Only allowlisted users in **private chats** can submit jobs, change settings, or access results. Job actions check ownership again. Source links must use HTTPS and an allowlisted provider hostname. Default providers: YouTube, Vimeo and Twitch. Collection URLs are capped to the first item; send a specific video URL for predictable results. Arbitrary direct HTTP downloads are intentionally not exposed by the bot; use Telegram uploads or the local CLI for other files.
+Only allowlisted users in **private chats** can submit jobs, change settings, or access results. Job actions check ownership again. Source links must use HTTPS and an allowlisted provider hostname. Default platforms include YouTube, Twitch, Kick, Vimeo, Facebook, Instagram, TikTok, X/Twitter, Dailymotion, Rumble, Bilibili and Odysee. Send a specific public video or saved VOD/clip; ongoing live channels are not recorded. Availability depends on the host and yt-dlp. Arbitrary direct HTTP downloads are not exposed by the bot; use Telegram uploads or the local CLI for other files.
 
 ## What the editing pipeline does
 
-- **Selection:** Reads the full bounded transcript to build context, discovers candidates in overlapping windows, then critiques candidates against surrounding source speech. It validates actual segment IDs, length, long gaps and scoring constraints before removing overlaps and near-duplicate text.
+- **Selection:** Uses caption indexing or bounded audio discovery for links, with explicit timeline coverage. Candidate discovery and critique validate actual segment IDs, length, long gaps and scoring constraints before removing overlaps and repeated text. Selected intervals receive local word-timestamp correction.
 - **Scoring:** Hook 25%, payoff 25%, standalone clarity 25%, emotion 10%, usefulness 15%. Scores are editorial estimates, not probabilities, predicted views, or measured virality. The offline heuristic is clearly labelled and deliberately scores conservatively.
 - **Captions:** Real Whisper word timestamps drive short stationary phrases with the spoken word highlighted. Text is escaped before writing ASS, and captions stay above common bottom controls. SRT and ASS remain available for later editing.
-- **Reframing:** Samples faces once per second using OpenCV, chooses a smoothed face-centered crop only when detection is sufficiently consistent and single-face, and otherwise preserves the full frame on a blurred background. Scene-change samples are saved in the vision report. This is conservative face detection, **not active-speaker identification**, and the model does not inspect frames when ranking clips.
+- **Reframing:** OpenCV YuNet samples faces about twice per second and smooths square crop centers using a dead zone, dropout hold and scene-cut reset. Optional wide-group preservation keeps multiple faces in view. Haar is a reported fallback if the model is missing. This is face detection, **not active-speaker identification**, and the ranking model does not inspect every source frame.
 - **Audio/export:** Normalizes loudness, encodes H.264/AAC with a Telegram-aware bitrate budget, strips source metadata and enables streaming playback. Spoken content and timing stay intact; it does not remove fillers or splice words together.
 - **QA:** Checks dimensions, duration, audio presence, effective silence, file size, and decodes the entire rendered clip. Failed technical validation triggers one lower-bitrate blurred-layout retry. This is **technical QA**, not a guarantee of factual correctness, accurate transcription, readable typography for every language, or perfect face visibility.
 
-There is no web dashboard, subscription system, social publishing, automatic soundtrack, fabricated hook voiceover, or view-growth guarantee. Review clips before publishing. Install fonts covering the source language; the Docker image includes Noto fonts, while Windows uses available system fonts through libass.
+Instagram publication and category music are available through the controls documented in [FEATURES.md](FEATURES.md). There is no view-growth guarantee. Review clips before publishing. Install fonts covering the source language; the Docker image includes Noto fonts, while Windows uses available system fonts through libass.
 
 ## Reliability, limits and storage
 
@@ -243,7 +254,10 @@ Defaults in `.env.example`:
 
 | Limit | Default |
 |---|---:|
-| Source duration | 120 minutes |
+| Source duration | 1440 minutes / 24 hours |
+| Long-source threshold | 45 minutes |
+| Long-source discovery budget | 24 minutes, adjustable per owner |
+| Concurrent scan downloads | 2 |
 | Source download size | 1500 MB |
 | Minimum free disk | 3000 MB |
 | Active/awaiting jobs | 3 |

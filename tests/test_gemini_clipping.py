@@ -7,8 +7,15 @@ from unittest.mock import AsyncMock
 import pytest
 
 from cliper.browser_provider import BrowserProviderError
-from cliper.gemini_clipping import GeminiVideo, VideoResult, validate_result, verify_range, youtube_url
-from cliper.models import Preferences
+from cliper.gemini_clipping import (
+    GeminiVideo,
+    VideoResult,
+    parse_gemini_video_result,
+    validate_result,
+    verify_range,
+    youtube_url,
+)
+from cliper.models import Preferences, Segment, Transcript, Word
 from cliper.pipeline import Pipeline
 from cliper.storage import write_json
 
@@ -160,6 +167,62 @@ async def test_link_first_pipeline_never_downloads_full_audio_or_checks_paid_key
     assert metadata.await_count == 1
 
 
+@pytest.mark.parametrize("repair_succeeds", [True, False])
+async def test_gemini_repair_is_bounded_and_only_valid_results_are_cached(cfg, monkeypatch, repair_succeeds):
+    from cliper import gemini_clipping
+
+    monkeypatch.setattr("cliper.remote_media.metadata", AsyncMock(return_value={
+        "duration": 80, "title": "Test", "id": "abcdefghijk"}))
+    bad = payload()
+    bad["clips"][0]["transcript"] = "Unrelated invented dialogue."
+    responses = [bad, payload()] if repair_succeeds else [bad] * 3
+    prompts = []
+
+    class Client:
+        def __init__(self, cfg):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def request_video(self, prompt, cancelled):
+            prompts.append(prompt)
+            return VideoResult.model_validate(responses[len(prompts) - 1])
+
+    monkeypatch.setattr(gemini_clipping, "GeminiVideo", Client)
+    prefs = Preferences(min_seconds=15, max_seconds=30, focus_times=[15])
+    call = gemini_clipping.analyze(URL, cfg.data_dir, prefs, cfg, AsyncMock(), lambda: False)
+    if repair_succeeds:
+        assert (await call).clips
+        cached = VideoResult.model_validate_json((cfg.data_dir / "gemini-clips.json").read_text("utf-8"))
+        assert cached.clips[0].transcript == payload()["clips"][0]["transcript"]
+        assert validate_result(cached, URL, {"duration": 80, "title": "Test"}, prefs)[0].clips
+    else:
+        with pytest.raises(ValueError, match="differs"):
+            await call
+        assert not (cfg.data_dir / "gemini-clips.json").exists()
+        assert not (cfg.data_dir / "analysis.json").exists()
+    assert len(prompts) == (2 if repair_succeeds else 3)
+    assert "[15.0]" in prompts[0] or "[15]" in prompts[0]
+    assert "failed local validation" in prompts[1]
+    assert (cfg.data_dir / "gemini-rejected-1.json").exists()
+
+
+async def test_gemini_focus_outside_source_fails_before_browser(cfg, monkeypatch):
+    from cliper import gemini_clipping
+
+    monkeypatch.setattr("cliper.remote_media.metadata", AsyncMock(return_value={
+        "duration": 80, "title": "Test", "id": "abcdefghijk"}))
+    browser = AsyncMock(side_effect=AssertionError("No browser should open"))
+    monkeypatch.setattr(gemini_clipping, "GeminiVideo", browser)
+    with pytest.raises(ValueError, match="focus timestamp"):
+        await gemini_clipping.analyze(URL, cfg.data_dir, Preferences(focus_times=[80]), cfg, AsyncMock(), lambda: False)
+    browser.assert_not_called()
+
+
 async def test_selected_range_correction_caches_and_flags_disagreement(cfg, transcript, monkeypatch):
     analysis, _ = validated()
     clip = analysis.clips[0]
@@ -286,3 +349,107 @@ def test_long_caption_phrases_are_automatically_split():
     assert all(s.end - s.start <= 6.0 for s in transcript.segments)
     assert " ".join(s.text for s in transcript.segments) == long_sentence
 
+
+def test_parse_gemini_video_result_real_wrapped_response():
+    raw_response = """Gemini said
+
+{"request_id": "304fa6201e534cb590562b36151c2ff0", "result": {"source_url": "https://www.youtube.com/watch?v=fQiofWCOvrg", "accessible": false, "access_note": "Video content is not accessible directly as real-time tool access to external web/YouTube transcript endpoints is disabled.", "language": "en", "clips": []}}
+
+How To Become a Great Communicator | Speak Like a Pro | English Podcast 
+Try To Thrive · 147K views"""
+    result = parse_gemini_video_result(raw_response)
+    assert result.source_url == "https://www.youtube.com/watch?v=fQiofWCOvrg"
+    assert result.accessible is False
+    assert "disabled" in result.access_note
+    assert result.clips == []
+
+
+def test_parse_gemini_video_result_handles_extra_fields_and_string_times():
+    raw_response = """
+```json
+{
+  "request_id": "OBJECT MATCHING SCHEMA BELOW",
+  "result": {
+    "source_url": "https://www.youtube.com/watch?v=abcdefghijk",
+    "accessible": true,
+    "access_note": "ok",
+    "language": "en",
+    "extra_summary": "Ignored extra field",
+    "clips": [
+      {
+        "start": "00:10",
+        "end": "00:30",
+        "title": "Great Communication Tip That Changes Everything You Know About Speaking In Public Today",
+        "hook_variants": ["Hook 1", "Hook 2", "Hook 3", "Hook 4"],
+        "reason": "Very clear and helpful explanation",
+        "ratings": {"hook": 9, "payoff": 8.5, "standalone": 9, "emotion": 8, "usefulness": 9, "engagement": 10},
+        "transcript": "Speak with confidence. Practice daily. Listen carefully to others.",
+        "captions": [
+          {"start": "00:10", "end": "00:15", "text": "Speak with confidence.", "words": []},
+          {"start": "00:15", "end": "00:22", "text": "Practice daily.", "words": []},
+          {"start": "00:22", "end": "00:30", "text": "Listen carefully to others.", "words": []}
+        ],
+        "music_category": "unknown_genre",
+        "caption": "Check out these tips!",
+        "hashtags": ["#speech", "#public", "#talk", "#english", "#tips", "#extra"],
+        "audience_value": "High value advice",
+        "unrecognized_field": 12345
+      }
+    ]
+  }
+}
+```
+"""
+    result = parse_gemini_video_result(raw_response)
+    assert result.accessible is True
+    assert len(result.clips) == 1
+    clip = result.clips[0]
+    assert clip.start == 10.0 and clip.end == 30.0
+    assert len(clip.hook_variants) == 3
+    assert len(clip.hashtags) == 5
+    assert clip.ratings.hook == 90
+    assert clip.music_category == "chill_ambient"
+    assert clip.captions[0].start == 10.0
+
+
+async def test_gemini_accessible_false_falls_back_to_audio_first(cfg, monkeypatch):
+    from cliper import gemini_clipping
+    from cliper.models import Analysis, Clip, Ratings
+    metadata = AsyncMock(return_value={"duration": 80, "title": "Test Video", "id": "abcdefghijk"})
+    monkeypatch.setattr("cliper.remote_media.metadata", metadata)
+
+    class UnavailableGeminiClient:
+        def __init__(self, cfg):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            pass
+        async def request_video(self, prompt, cancelled):
+            return VideoResult(source_url=URL, accessible=False, access_note="Disabled tool", language="en", clips=[])
+
+    monkeypatch.setattr(gemini_clipping, "GeminiVideo", UnavailableGeminiClient)
+
+    # Mock audio-first pipeline dependencies
+    audio_path = cfg.data_dir / "audio.wav"
+    audio_path.write_bytes(b"dummy audio")
+    monkeypatch.setattr("cliper.remote_media.audio", AsyncMock(return_value=(audio_path, {"duration": 80, "title": "Test Video"})))
+    dummy_transcript = Transcript(language="en", duration=80, segments=[
+        Segment(start=10, end=30, text="Audio first fallback worked.", words=[Word(start=10, end=30, text="Audio first fallback worked.")])
+    ])
+    monkeypatch.setattr("cliper.media.transcribe", AsyncMock(return_value=dummy_transcript))
+    dummy_clip = Clip(id=1, start=10, end=30, title="Fallback Clip", hook_variants=[], reason="Fallback",
+                      hook_text="Audio", score=85, ratings=Ratings(hook=85, payoff=85, standalone=85, emotion=85, usefulness=85),
+                      text="Audio first fallback worked.", selection_method="heuristic")
+    dummy_analysis = Analysis(title="Test Video", language="en", duration=80, method="audio_first", clips=[dummy_clip])
+    monkeypatch.setattr("cliper.pipeline.select", AsyncMock(return_value=dummy_analysis))
+    scan = AsyncMock(return_value=dummy_analysis)
+    monkeypatch.setattr("cliper.stream_scan.analyze", scan)
+
+    prefs = Preferences(clipping_mode="gemini_browser", min_seconds=15, max_seconds=30)
+    directory = cfg.data_dir / "job_fallback"
+    progress = AsyncMock()
+    analysis = await Pipeline(cfg).analyze(URL, directory, prefs, progress)
+    assert analysis.method == "audio_first"
+    scan.assert_awaited_once()
+    assert any("falling back" in str(call.args[0]).lower() for call in progress.await_args_list)

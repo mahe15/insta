@@ -37,6 +37,7 @@ def export_metadata(directory: Path) -> Path:
     output = directory / "captions-and-edit-plans.zip"
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for file in [directory / "analysis.json", directory / "transcript.json", directory / "gemini-clips.json",
+                     *(directory / "scan").glob("*/plan.json"),
                      *(directory / "ranges").glob("*/caption-verification/*.json"),
                      *(directory / "clips").glob("*")]:
             if file.is_file() and file.suffix in {".json", ".ass", ".srt"}:

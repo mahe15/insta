@@ -45,7 +45,13 @@ Send a video link or upload a video. I’ll transcribe it, find complete moments
 Choose your clips, then get vertical videos with highlighted captions and balanced audio.
 
 /settings — your editing preferences
+/speedclip YOUTUBE_URL — IShowSpeed studio, English, 6–60 seconds
+/xpost football KEYWORDS — research an English X post; review in X Studio
+/xjobs — recent X research and publishing states
 /geminiclip YOUTUBE_URL — clipping using Gemini website, no API key
+/platforms — supported video and VOD sites
+/scan 24 — long-stream analysis budget in minutes
+/focus 01:20:00 08:10:00 — prioritize known moments; /focus clear resets
 /provider — choose ChatGPT browser, OpenAI, Grok, Gemini or offline ranking
 /jobs — recent jobs
 /status JOB — progress or shortlist
@@ -88,7 +94,30 @@ class Controller:
         if update.effective_chat.type == "private":
             await update.message.reply_text(f"Your Telegram user ID: {update.effective_user.id}")
 
+    async def x_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not await self.guard(update):
+            return
+        from .x_content import CATEGORIES, ResearchInput
+        from .x_studio import XStore
+        db = XStore(self.store)
+        owner = update.effective_user.id
+        if update.message.text.split()[0].split("@")[0] == "/xjobs":
+            jobs = db.recent(owner)[:10]
+            await update.message.reply_text("\n".join(f"{j['id']} · {j['state']} · {j['request']['category']}" for j in jobs) or "No X projects yet. Use /xpost football KEYWORDS.")
+            return
+        args = context.args or []
+        if not args or args[0] not in CATEGORIES:
+            await update.message.reply_text("Use /xpost CATEGORY optional keywords. Categories: " + ", ".join(CATEGORIES))
+            return
+        try:
+            job = db.create(owner, ResearchInput(category=args[0], keywords=" ".join(args[1:])))
+            await update.message.reply_text(f"X research queued: {job['id']}. Review sources and media in web Studio → X Studio. /xjobs checks progress.")
+        except ValueError as exc:
+            await update.message.reply_text(str(exc))
+
     async def notify(self, job, text):
+        if not job["chat"]:
+            return
         text = f"🎬 {job['id']}\n{text}"
         previous = self.progress_messages.get(job["id"])
         if previous:
@@ -105,6 +134,10 @@ class Controller:
     def board(self, job, analysis):
         description = f"✨ Your shortlist · {job['id']}\nRanking: {analysis.method}"
         description += f" / {analysis.model}\n" if analysis.model else "\n"
+        if analysis.coverage:
+            c = analysis.coverage
+            description += (f"Analyzed {c['analyzed_seconds'] / 60:.1f} / {c['source_seconds'] / 60:.1f} min "
+                            f"({c['fraction']:.1%}). " + ("Partial scan: other highlights may be missed.\n" if c['partial'] else "\n"))
         for clip in analysis.clips:
             description += f"\n{clip.id}. {clip.title}\n{clip.score}/100 editorial score · "
             description += f"{clip.end - clip.start:.0f}s · {clip.start:.1f}–{clip.end:.1f}s\n"
@@ -120,11 +153,15 @@ class Controller:
         return description, keyboard
 
     async def shortlist(self, job, analysis):
+        if not job["chat"]:
+            return
         text, keyboard = self.board(job, analysis)
         await self.app.bot.send_message(job["chat"], text, reply_markup=keyboard)
 
     async def deliver(self, job, clip, output: Path):
         post = self.controls.clip_publication(job, clip, output)
+        if not job["chat"]:
+            return
         caption = f"🎬 {clip.title}\n\n{clip.score}/100 editorial score · {clip.end - clip.start:.0f}s\n"
         caption += f"{clip.reason}\n\nSource: {clip.start:.1f}–{clip.end:.1f}s · Job {job['id']}"
         for attempt in range(3):
@@ -155,9 +192,30 @@ class Controller:
             if name in {"start", "help"}:
                 await self.controls.show(update.message, owner)
                 return
-            elif name in {"autopublish", "music", "feature"}:
+            elif name == "platforms":
+                from .platforms import help_text
+                await update.message.reply_text(help_text())
+            elif name in {"scan", "focus"}:
+                from .stream_scan import timestamp
                 p = self.store.prefs(owner)
-                if name == "feature":
+                if name == "scan":
+                    if len(args) != 1:
+                        raise ValueError("Use /scan MINUTES, from 6 to 1440; larger scans trade speed for coverage")
+                    p = Preferences.model_validate(p.model_dump() | {"scan_minutes": int(args[0])})
+                else:
+                    if not args:
+                        raise ValueError("Use /focus HH:MM:SS ... or /focus clear")
+                    values = [] if args == ["clear"] else [timestamp(value) for value in args]
+                    p = Preferences.model_validate(p.model_dump() | {"focus_times": values})
+                self.store.save_prefs(owner, p)
+                await update.message.reply_text(f"New jobs: scan budget {p.scan_minutes} min; focus seconds {p.focus_times}")
+            elif name in {"autopublish", "music", "feature", "qa", "f2qa"}:
+                p = self.store.prefs(owner)
+                if name in {"qa", "f2qa"}:
+                    if not args or args[0].lower() not in {"on", "off"}:
+                        raise ValueError(f"Use /{name} on or off")
+                    p = p.model_copy(update={"f2_skip_image_qa": args[0].lower() == "off"})
+                elif name == "feature":
                     if not args or args[0].lower() not in {"f1", "f2", "both"}:
                         raise ValueError("Use /feature f1, f2 or both; enable each feature with the dashboard buttons")
                     mode = args[0].lower()
@@ -186,8 +244,9 @@ class Controller:
                 reply = (f"⚙️ Your editing defaults\n\n{p.clips} clips · {p.min_seconds}–{p.max_seconds}s\n"
                          f"AI: {ai.provider} / {ai.model}\n/provider — switch provider\n"
                          f"{p.width}×{p.width * 16 // 9} · {p.style} · captions {'on' if p.captions else 'off'}\n"
+                         f"F2 Carousel QA: {'off (skip QA & approve images)' if p.f2_skip_image_qa else 'on'}\n"
                          f"Reframe: {p.reframe} · Language: {p.language} · Auto-render: {p.auto_render}\n\n"
-                         "/clips 5\n/length 30-60\n/style studio|bold|minimal\n/captions on|off\n"
+                         "/clips 5\n/length 30-60\n/style studio|bold|minimal\n/captions on|off\n/qa on|off\n"
                          "/reframe auto|blur|center\n/language auto|en|hi\n/resolution 720|1080\n/auto on|off\n\n"
                          "Changes apply to new jobs. Auto uses face detection; blur preserves the whole frame.")
             elif name == "provider":
@@ -388,6 +447,9 @@ class Controller:
             owner, chat = update.effective_user.id, update.effective_chat.id
             prefs = self.cfg.snapshot_ai(self.store.prefs(owner))
             command = (update.message.text or "").split(maxsplit=1)[0].split("@")[0]
+            if command == "/speedclip":
+                from .speed_profile import preset
+                prefs = preset(prefs)
             if command == "/geminiclip":
                 prefs = prefs.model_copy(update={"clipping_mode": "gemini_browser"})
             if (prefs.clipping_mode == "audio_first" or prefs.gemini_verify_captions) and not importlib.util.find_spec("faster_whisper"):
@@ -410,7 +472,7 @@ class Controller:
                 self.store.update(job["id"], source=str(path.resolve()), state="queued_analysis")
             else:
                 url = (update.message.text or "").strip()
-                if command in {"/clip", "/geminiclip"}:
+                if command in {"/clip", "/geminiclip", "/speedclip"}:
                     url = url.split(maxsplit=1)[1].strip() if len(url.split(maxsplit=1)) == 2 else ""
                 if prefs.clipping_mode == "gemini_browser":
                     from .gemini_clipping import youtube_url
@@ -443,7 +505,12 @@ class Controller:
     async def start(self, app):
         self.app = app
         await app.bot.set_my_commands([BotCommand("start", "Open your clip studio"),
+                                      BotCommand("xpost", "Research an X post by category and keywords"),
+                                      BotCommand("xjobs", "Recent X research and publishing states"),
+                                      BotCommand("speedclip", "IShowSpeed clips in English, 6–60 seconds"),
                                       BotCommand("geminiclip", "Clip a YouTube link using Gemini website"),
+                                      BotCommand("platforms", "Supported video and VOD platforms"),
+                                      BotCommand("scan", "Set long-stream scan minutes"),
                                       BotCommand("settings", "Editing defaults"), BotCommand("jobs", "Recent jobs"),
                                       BotCommand("status", "Job progress"), BotCommand("whoami", "Your user ID"),
                                       BotCommand("provider", "Switch ChatGPT browser, OpenAI, Grok or Gemini"),
@@ -453,13 +520,18 @@ class Controller:
         self.maintenance_task = asyncio.create_task(self.maintain())
         from cliper.faceless import FacelessWorker
         from cliper.publishing import InstagramPublisher
+        from cliper.youtube_publishing import YouTubePublisher
         async def publish_notify(post, message):
-            await self.app.bot.send_message(post["chat"], message)
+            if post["chat"]:
+                await self.app.bot.send_message(post["chat"], message)
         self.publisher_task = asyncio.create_task(InstagramPublisher(self.controls.publications).run(publish_notify))
+        self.yt_publisher_task = asyncio.create_task(YouTubePublisher(self.controls.publications, cfg=self.cfg).run(publish_notify))
         self.faceless_task = asyncio.create_task(FacelessWorker(self.controls).run())
+        from .x_studio import XWorker
+        self.x_task = asyncio.create_task(XWorker(self.cfg, self.store).run())
 
     async def stop(self, app):
-        for task in (self.publisher_task, self.faceless_task):
+        for task in (self.publisher_task, self.yt_publisher_task, self.faceless_task, getattr(self, "x_task", None)):
             if task:
                 task.cancel()
                 await asyncio.gather(task, return_exceptions=True)
@@ -477,11 +549,13 @@ class Controller:
         app = (Application.builder().token(self.cfg.token).post_init(self.start).post_stop(self.stop)
                .concurrent_updates(4).read_timeout(60).write_timeout(180).connect_timeout(30).build())
         app.add_handler(CommandHandler("whoami", self.whoami))
-        app.add_handler(CommandHandler(["clip", "geminiclip"], self.submit))
+        app.add_handler(CommandHandler(["xpost", "xjobs"], self.x_command))
+        app.add_handler(CommandHandler(["clip", "geminiclip", "speedclip"], self.submit))
         app.add_handler(CommandHandler(["start", "help", "jobs", "settings", "provider", "clips", "length", "style",
                                         "captions", "reframe", "language", "resolution", "auto", "status",
                                         "cancel", "retry", "render", "export", "cleanup", "autopublish", "music",
-                                        "feature", "generate", "schedule"], self.command))
+                                        "feature", "generate", "schedule", "platforms", "scan", "focus",
+                                        "qa", "f2qa"], self.command))
         app.add_handler(CallbackQueryHandler(self.controls.callback, pattern=r"^(ui|pub):"))
         app.add_handler(CallbackQueryHandler(self.callback, pattern=r"^(all|top|custom|cancel):[0-9a-f]{12}$"))
         app.add_handler(MessageHandler(filters.VIDEO | filters.Document.VIDEO | (filters.TEXT & ~filters.COMMAND),

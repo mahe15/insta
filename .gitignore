@@ -11,9 +11,14 @@ __pycache__/
 .ruff_cache/
 build/
 dist/
+node_modules/
+frontend/test-results/
+frontend/playwright-report/
 *.log
 config/instagram.json
 config/niches.json
+config/youtube.json
+config/youtube.json.bak
 music/**/*.mp3
 music/**/*.wav
 music/**/*.m4a

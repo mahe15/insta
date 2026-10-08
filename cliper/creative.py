@@ -7,47 +7,98 @@ import re
 from .editorial import similarity, tokens
 
 CAROUSEL_BRIEF = """
-Build an original, useful carousel rather than a sequence of motivational slogans. Give one viewer
-one practical payoff. Slide 1 earns attention with a specific, honest tension; slide 2 must also
-stand alone as an entry point and deepen the promise; middle slides add concrete examples or steps;
-the last resolves the idea and suggests ONE relevant action. Do not repeat 'follow/save/share' on
-every slide. Each slide needs a new visual beat, not the same character pose behind different text.
-Prefer 5–7 slides when the idea earns them; use 4 for a concise complete arc. Shortness is a design
-choice, not a virality claim. Cover text: 4–12 words. Body text: preferably 8–25 words, never >40.
-Choose an identifiable series format: mistake→cost→alternative, myth→qualified explanation→practice,
-worked example, checklist, decision tree, or problem→mechanism→small experiment. Vary format and
-pillar across a batch. Give the reader something worth returning to or sending to a specific friend.
-Avoid shame, fake diagnoses, invented research, copied quotes, false scarcity and wealth guarantees.
-Statistics and arithmetic must be supported; provide numeric calculations for numerical transformations.
-RSS headlines are only inspiration. Without supplied verified evidence, produce evergreen explanations
-and explicitly illustrative examples; never claim a headline proves a study or current product feature.
-Maintain the niche's character identity, type hierarchy, palette and spacing across the full carousel.
-Keep typography outside the face/hands and away from busy texture. Reserve a calm negative-space text
-zone. Do not ask the image model to render prompt metadata, source URLs, instructions or duplicate text.
-Every image_prompt must describe environment, action, framing and the story beat, not merely 'cinematic'.
+Build an original, high-impact Instagram carousel following these 10 core design rules:
+
+1. FONT & TYPOGRAPHY:
+Use a bold, modern sans-serif font with a thick/heavy weight similar to Montserrat ExtraBold, Anton, or Bebas Neue.
+Font must be clean, simple and highly readable on a phone.
+STRICTLY NEVER use decorative, cursive, thin, script, or handwritten fonts.
+
+2. FONT SIZE:
+Text must be large, punchy and dominant on the slide.
+Main headline / primary numbers: approximately 8–12% of image height (108–162px on 1080x1350).
+Secondary text: approximately 6–9% of image height (80–120px).
+Never make text small just to fit more words. If the sentence doesn't fit, shorten the sentence instead of reducing font size.
+
+3. TEXT COLOUR:
+Strict primary text palette:
+- Main text: solid crisp WHITE.
+- Important numbers / key impact keywords: vibrant bold RED.
+Use only these primary text colours. Example: "20 PUSH-UPS" in RED, "PER DAY" in WHITE.
+Maintain strong contrast against the background at all times.
+
+4. TEXT LENGTH:
+Very little text. Prefer 1 single line; maximum 2 short lines.
+NEVER use paragraphs or blocks of text on the image.
+Target approximately 3–8 words per slide.
+The image must communicate the story, not a block of text.
+
+5. DAILY → YEARLY COMPARISON:
+Every applicable post should create a clear small daily action → huge yearly result comparison.
+Always calculate the number correctly (e.g. 10 PAGES A DAY → 3,650 PAGES A YEAR; 50 PUSH-UPS A DAY → 18,250 PUSH-UPS A YEAR; 30 MINUTES A DAY → 182.5 HOURS A YEAR).
+Make the compound yearly number visually prominent and highlighted in bold RED.
+
+6. VISUAL COMPARISON & PROGRESSION:
+Show the difference visually across the sequence: before vs. after, wasted time vs. invested time, weak/starting state vs. developed/competent state.
+Keep the same character throughout the carousel:
+- Beginning slides: darker/cooler/less developed starting state.
+- Ending slides: brighter/warmer/stronger/more confident posture and resolve.
+The transformation should be obvious from the visual alone without needing to read a paragraph.
+
+7. CHARACTER CONSISTENCY:
+Use one original protagonist throughout the entire carousel.
+Same face, hairstyle, athletic/muscular body proportions and overall identity on every slide.
+Anime-inspired, muscular/athletic male character.
+Dark clothing with subtle red accents.
+Serious, disciplined, focused expression.
+Do not randomly change the character between slides.
+
+8. COMPOSITION & PLACEMENT:
+Use 4:5 Instagram portrait format (1080×1350).
+Character should occupy a major portion of the frame (cinematic medium/close framing).
+Keep the character's face, eyes, and key action completely unobstructed.
+Place text in a quiet high-contrast negative-space zone (minimum 100px side/top margins, 150px bottom margin).
+Use cinematic environments and depth; avoid clutter.
+
+9. OVERALL VISUAL STYLE:
+Premium cinematic anime illustration (cinematic movie frame quality, not generic AI clip-art).
+Dramatic lighting, detailed environment, strong shadows and highlights.
+Dark → warm visual progression across the carousel.
+High detail, sharp anatomy, realistic perspective.
+No watermarks, random logos, unnecessary graphics, or UI elements.
+
+10. THE GOLDEN RULE — SIMPLICITY:
+ONE IDEA PER SLIDE. The viewer should understand the message in 1–2 seconds.
+Prioritize in this order: HOOK → NUMBER → VISUAL → EMOTION.
+NEVER: LONG TEXT → SMALL FONT → CLUTTERED IMAGE.
 """
 
 BLUEPRINTS = {
-    "dark": {"formats": ["habit friction experiment", "time trade-off", "mistake and alternative"],
-             "visual_arc": "isolated room → deliberate action → open sunrise; agency rather than intimidation",
-             "palette": "charcoal, warm ivory type, restrained ember accents",
-             "audience": "a distracted young adult who wants one achievable action today"},
-    "men": {"formats": ["communication before/after", "fitness habit checklist", "confidence through practice"],
-            "visual_arc": "uncertainty → respectful practice → grounded competence; no dominance caricature",
-            "palette": "deep navy, warm white type, muted amber",
-            "audience": "a young man building useful habits and respectful relationships"},
-    "money": {"formats": ["spending decision tree", "illustrative opportunity cost", "money habit experiment"],
-              "visual_arc": "temptation → visible trade-off → deliberate choice; clear labelled arithmetic",
-              "palette": "charcoal, ivory type, muted gold",
-              "audience": "someone who wants to understand a spending decision without being shamed"},
-    "tech": {"formats": ["concept explained", "workflow checklist", "capability versus limitation"],
-             "visual_arc": "confusing interface → simple mechanism → useful application; no imaginary UI claims",
-             "palette": "midnight blue, white type, restrained cyan/orange",
-             "audience": "a curious non-expert who wants a useful, honest explanation of technology"},
-    "finance": {"formats": ["risk comparison", "business mechanism", "illustrative cash-flow example"],
-                "visual_arc": "decision → risk/trade-off → general principle; no investment recommendations",
-                "palette": "deep green/charcoal, ivory type, muted brass",
-                "audience": "a beginner learning business and financial concepts, not seeking stock tips"},
+    "dark": {"formats": ["small daily action vs huge yearly result", "daily habit compounding", "mistake and alternative"],
+             "visual_arc": "dark/cool/isolated starting state → deliberate discipline → bright/warm confident strength",
+             "palette": "deep charcoal, crisp white type with vibrant bold red number/keyword accents",
+             "protagonist": "anime-inspired muscular athletic male, dark clothing with subtle red accents, disciplined serious expression",
+             "audience": "a driven young adult building daily discipline and compounding habits"},
+    "men": {"formats": ["daily workout compounding", "small daily action vs yearly result", "confidence through practice"],
+            "visual_arc": "cool uncertainty/weak start → grounded practice → warm powerful competence and strength",
+            "palette": "midnight navy/charcoal, crisp white type with bold red metric highlights",
+            "protagonist": "anime-inspired muscular athletic male, dark athletic gear with subtle red accents, disciplined serious expression",
+            "audience": "a young man building daily fitness, focus, and grounded competence"},
+    "money": {"formats": ["small daily saving vs yearly wealth", "daily spend trade-off", "delayed gratification comparison"],
+              "visual_arc": "cool-toned financial friction → deliberate daily choice → warm empowered stability and freedom",
+              "palette": "deep charcoal, crisp white type with bold red calculation highlights",
+              "protagonist": "anime-inspired muscular athletic male, dark sleek clothing with subtle red accents, focused serious expression",
+              "audience": "someone who wants to see the huge yearly power of small daily financial choices"},
+    "tech": {"formats": ["daily 30-min skill build vs 180h yearly mastery", "simple mechanism", "focus vs distraction"],
+             "visual_arc": "cool cluttered distraction → focused practice → warm high-agency mastery",
+             "palette": "midnight obsidian, pure white type with vivid red keyword accents",
+             "protagonist": "anime-inspired muscular athletic male, dark techwear with subtle red accents, intense focused gaze",
+             "audience": "a curious builder using daily focused habits to master technology and AI"},
+    "finance": {"formats": ["daily dollar compounding", "risk trade-off", "small daily investment vs yearly capital"],
+                "visual_arc": "uncertain cool start → disciplined daily capital allocation → warm commanding financial security",
+                "palette": "charcoal/deep forest, pure white type with bold red numeric highlights",
+                "protagonist": "anime-inspired muscular athletic male, sharp dark tailored clothing with subtle red accents, disciplined confident expression",
+                "audience": "a disciplined person learning the compound interest of daily decisions"},
 }
 
 
@@ -59,6 +110,8 @@ def plan_audit(plan, history):
     for n, text in enumerate(texts, 1):
         if len(tokens(text)) > 40:
             errors.append(f"Slide {n} exceeds 40 words; reduce text before images")
+        elif len(tokens(text)) > 10:
+            warnings.append(f"Slide {n} text ({len(tokens(text))} words) exceeds preferred 3–8 words; shorten for mobile impact")
         for previous in texts[:n - 1]:
             if text.strip().casefold() == previous.strip().casefold():
                 errors.append(f"Slide {n} repeats an earlier slide exactly")
@@ -83,25 +136,65 @@ def text_matches(observed, expected):
     return bool(observed.strip()) and normalize(observed) == normalize(expected)
 
 
-def slide_prompt(plan, slide, index, brand, niche, feedback=None):
-    last = index == len(plan.slides)
-    return ("Generate ONE finished original Instagram carousel image, exactly 1080x1350 portrait 4:5. "
-            "The attached image is the CHARACTER REFERENCE, not a layout to copy. Preserve face, hair, "
-            "distinctive features and identity; adapt clothing, pose and environment to this story beat. "
-            "Create the complete artwork AND typography. Cinematic anime realism, intentional composition, "
-            "an expressive readable subject, physically coherent hands/props, no unrelated characters. "
-            "Use one bold clean sans-serif type family, consistent with the series, preferably 64–96px for "
-            "headlines and at least 44px for body text at export resolution. Avoid decorative pseudo-letters. "
-            "Place text in a quiet high-contrast area, minimum 100px side/top margins and 150px bottom margin. "
-            "Keep the character's eyes and hands unobstructed. Do not render tiny footnotes or stray text. "
-            + ("This is the final payoff slide; no swipe marker. " if last else
-               "Leave the bottom-right 300x140px free for the swipe overlay added afterward. ")
-            + f"Slide {index}/{len(plan.slides)}. Full narrative context: "
-            + json.dumps([s.text for s in plan.slides], ensure_ascii=False)
-            + "\nRender ONLY the following exact text on THIS image, once, with correct spelling: "
-            + json.dumps(slide.text, ensure_ascii=False)
-            + "\nDo not print the context, metadata, prompt or instructions.\nBRAND: "
-            + json.dumps(brand, ensure_ascii=False) + "\nSERIES DIRECTION: "
-            + json.dumps(BLUEPRINTS.get(niche, {}), ensure_ascii=False)
-            + "\nSCENE: " + slide.model_dump_json()
-            + ("\nCorrect the previous attempt's defects: " + json.dumps(feedback) if feedback else ""))
+def slide_prompt(plan, slide, index, brand, niche, feedback=None, user_prompt=None):
+    from .prompts import get_prompt
+    total = len(plan.slides)
+    last = index == total
+    if index == 1:
+        arc_note = "Beginning state: darker, cooler, moody atmosphere, starting/less developed state with focused determination."
+    elif last:
+        arc_note = "Final payoff: brightest, warmest lighting, peak physical and mental strength, victorious, confident, grounded resolve."
+    else:
+        pct = int((index / total) * 100)
+        arc_note = f"Progressive transformation ({pct}% journey): transitioning from cool tones into warmer, brighter lighting, visibly stronger, disciplined and developing competence."
+
+    swipe_note = (
+        "This is the final payoff slide; no swipe marker."
+        if last else
+        "Leave the bottom-right 300x140px free for the swipe overlay added afterward."
+    )
+    user_prompt_section = (
+        f"\n=== USER CREATIVE DIRECTION ===\n{user_prompt}\n"
+        if user_prompt else ""
+    )
+    feedback_section = (
+        f"\nCorrect the previous attempt's defects: {json.dumps(feedback)}"
+        if feedback else ""
+    )
+
+    template = get_prompt("carousel_slide_prompt")
+    if "{index}" in template and "{slide_text_json}" in template:
+        try:
+            return template.format(
+                index=index,
+                total=total,
+                arc_note=arc_note,
+                swipe_note=swipe_note,
+                context_json=json.dumps([s.text for s in plan.slides], ensure_ascii=False),
+                slide_text_json=json.dumps(slide.text, ensure_ascii=False),
+                brand_json=json.dumps(brand, ensure_ascii=False),
+                niche_json=json.dumps(BLUEPRINTS.get(niche, {}), ensure_ascii=False),
+                scene_json=slide.model_dump_json(),
+                user_prompt_section=user_prompt_section,
+                feedback_section=feedback_section,
+            )
+        except (KeyError, IndexError, ValueError):
+            pass
+
+    return (
+        template + "\n\n"
+        f"Visual progression (Slide {index}/{total}): {arc_note}\n"
+        f"{swipe_note}\n\n"
+        f"Slide {index}/{total}. Full narrative context: "
+        + json.dumps([s.text for s in plan.slides], ensure_ascii=False)
+        + "\n\nRender ONLY the following exact text on THIS image, once, with correct spelling:\n"
+        + json.dumps(slide.text, ensure_ascii=False)
+        + "\n(Apply colour rule: render key numbers and crucial impact words in bold RED, and surrounding text in crisp WHITE. Do not print prompt instructions, metadata, or labels on the artwork.)\n"
+        + "BRAND: " + json.dumps(brand, ensure_ascii=False) + "\n"
+        + "SERIES DIRECTION: " + json.dumps(BLUEPRINTS.get(niche, {}), ensure_ascii=False) + "\n"
+        + "SCENE: " + slide.model_dump_json()
+        + (user_prompt_section if user_prompt else "")
+        + feedback_section
+    )
+
+

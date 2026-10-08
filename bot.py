@@ -13,11 +13,11 @@ if venv_python.exists() and Path(sys.executable).resolve() != venv_python.resolv
 if str(root) not in sys.path:
     sys.path.insert(0, str(root))
 
-from cliper.cli import main
-
 if __name__ == "__main__":
+    from cliper.cli import main
+
     if len(sys.argv) == 1:
         sys.argv.append("bot")
-    elif sys.argv[1] not in {"bot", "doctor", "demo", "run", "browser-login", "browser-check", "cleanup"}:
+    elif sys.argv[1] not in {"bot", "web", "doctor", "demo", "run", "browser-login", "browser-check", "cleanup"}:
         sys.argv.insert(1, "bot")
     main()

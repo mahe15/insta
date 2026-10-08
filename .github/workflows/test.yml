@@ -9,6 +9,14 @@ jobs:
         with:
           python-version: "3.12"
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-dejavu-core
-      - run: pip install -e '.[dev]'
+      - run: pip install -e '.[dev,web,browser]'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci && npm run build
+        working-directory: frontend
+      - run: python -m playwright install --with-deps chromium
       - run: ruff check .
       - run: pytest -q

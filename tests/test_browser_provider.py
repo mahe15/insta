@@ -10,7 +10,7 @@ import pytest
 from cliper.bot import Controller
 from cliper.browser_provider import BrowserEditorialClient, BrowserProviderError, ContextResult, parse_result
 from cliper.config import normalize_provider
-from cliper.models import Preferences
+from cliper.models import Preferences, Proposals
 from cliper.selection import select
 
 
@@ -21,6 +21,7 @@ def result_json(request_id="abc", summary="A complete summary"):
 def test_strict_browser_json():
     assert parse_result(result_json(), "abc", ContextResult).summary == "A complete summary"
     assert parse_result("```json\n" + result_json() + "\n```", "abc", ContextResult).summary
+    assert parse_result("JSON\n<escape>" + result_json() + "</escape>", "abc", ContextResult).summary
 
 
 @pytest.mark.parametrize("raw", [
@@ -158,3 +159,45 @@ async def test_real_chromium_waits_for_completed_turn_and_ignores_old_reply(cfg,
                 await client.wait_reply(page, before=0)
         finally:
             await browser.close()
+
+
+def test_parse_result_proposals_resilient_to_long_strings_and_ratings():
+    raw = json.dumps({
+        "request_id": "test_req",
+        "result": {
+            "clips": [
+                {
+                    "first_segment": 0,
+                    "last_segment": 5,
+                    "title": "A" * 110,
+                    "reason": "B" * 600,
+                    "hook_text": "So every time when I saw them, you know, going out, and you know, making a lot of money and being successful, I felt like, you know, inferior from them. " * 3,
+                    "ratings": {"hook": 9, "payoff": 8.5, "standalone": 9, "emotion": 8, "usefulness": 9.5, "extra": "ignored"},
+                    "music_category": "unrecognized_genre",
+                    "caption": "Check this out!",
+                    "hashtags": ["#one", "#two", "#three", "#four", "#five", "#six"],
+                    "hook_variants": ["Hook 1", "Hook 2", "Hook 3", "Hook 4"],
+                    "audience_value": "Very insightful career and life advice for ambitious viewers"
+                }
+            ]
+        }
+    })
+    proposals = parse_result(raw, "test_req", Proposals)
+    assert len(proposals.clips) == 1
+    clip = proposals.clips[0]
+    assert len(clip.title) <= 120
+    assert len(clip.reason) <= 1000
+    assert len(clip.hook_text) <= 500
+    assert clip.ratings.hook == 90
+    assert clip.ratings.payoff == 85
+    assert clip.music_category == "chill_ambient"
+    assert len(clip.hashtags) == 5
+    assert len(clip.hook_variants) == 3
+
+
+def test_parse_result_context_result_long_summary():
+    long_text = "The guest discusses career perspectives and lessons. " * 300
+    assert len(long_text) > 10000
+    raw = json.dumps({"request_id": "summary_req", "result": {"summary": long_text}})
+    result = parse_result(raw, "summary_req", ContextResult)
+    assert len(result.summary) > 10000

@@ -23,6 +23,12 @@ manufactured outrage. Keep necessary names and use the source language. Provide 
 hook_variants (direct value, curiosity, contrast), each grounded in the supplied transcript.
 audience_value must name a specific viewer and why they would send this to a friend or save it.
 Do not guess algorithm weights or promise views. Ratings are editorial judgments only.
+For livestreams distinguish a complete reaction/story/payoff from volume, shouting or a replay spike.
+Treat chapter titles and popularity signals as leads, not proof of quality. Preserve who/what/why in
+gaming moments; do not choose a face-camera reaction if the underlying event cannot be understood.
+Prefer a hook that names the tension without spoiling the whole payoff. Deliver the promised fact
+inside the clip. Avoid packaging an unrelated caption as if the speaker said it. A truthful qualifier
+is more valuable than an exaggerated promise. Select distinct topics, not ten variations of one rant.
 """
 
 STOP = set("a an the to of in on for and or is are be it this that your you with from at as by".split())

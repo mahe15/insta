@@ -4,7 +4,11 @@ Start the bot with `scripts/start.ps1`, then send `/start` in your private Teleg
 
 ## Feature 1: clips
 
-For video links, CLIPER downloads audio first, transcribes it locally, and asks the selected AI to choose clips and return a title, music category, caption and up to five hashtags. It then downloads only the selected video ranges. Hosts must support ranged extraction; a failed range download produces an error instead of a full-video fallback. Local uploads already contain the video and use that local file.
+**Speed Studio** adds dedicated IShowSpeed stream editing from YouTube: English text, complete 6–60 second moments, restrained licensed sound accents and reaction punch-ins. Open it in the web sidebar or send `/speedclip YOUTUBE_URL` on Telegram. Normal clipping now defaults to English/Latin letters while keeping the spoken language (Hindi → Hinglish). Language controls are in web Settings and project editing preferences. See [Speed Studio and language guide](SPEED_STUDIO.md).
+
+For video links, CLIPER checks metadata and caption tracks first. Long videos use a bounded scan of text or audio windows; missing window transcripts share one local CUDA model load. The selected AI returns clips, hooks, music categories, captions and up to five hashtags. Only selected video ranges are downloaded, with local word-timestamp correction before editing. Hosts must support ranged extraction; a failed range download produces an error. Local uploads use their existing local file.
+
+Use **Normal / stream clipping** for YouTube, Twitch, Kick, Vimeo, Facebook, Instagram, TikTok, X/Twitter, Dailymotion, Rumble, Bilibili and Odysee. `/platforms` explains availability. Send saved broadcasts or clips, not ongoing live channels. `/scan 24` sets a 24-minute long-source discovery budget; `/focus 01:20:00 08:10:00` prioritizes known moments and `/focus clear` resets them. A partial scan can miss highlights; the shortlist shows examined coverage. Sources up to 45 minutes are fully analyzed by default unless focus is set. See [long-stream architecture and research](LONG_STREAM_ARCHITECTURE.md).
 
 The default export is a **1080×1920 black canvas**, with a centered **1080×1080 square video**, a wrapped white bold hook title immediately above it, and optional timed captions. Turning captions off keeps the hook title. Whisper uses CUDA and final video encoding uses NVENC on this machine; audio and composition still use CPU components.
 
@@ -18,7 +22,7 @@ Put your tracks in these existing folders:
 | `Energetic - Hype` | `energetic_hype` |
 | `Chill - Ambient` | `chill_ambient` |
 
-Supported files: MP3, WAV, M4A, AAC, FLAC and OGG. One random matching track is looped beneath the speech at **20% linear volume**. A saved selection is reused on retry. Empty categories render without music; the export's JSON records the category, selected file and gain. Use the Music button or `/music on` and `/music off`.
+Supported files: MP3, WAV, M4A, AAC, FLAC and OGG. One random matching track is normalized, then looped beneath speech at **20% linear gain**, with fades and optional speech ducking. Editing buttons offer 10%, 15% and 20%. A saved selection is reused on retry. Empty categories render without music; export JSON records the category, file, gain and normalization. Use the Music button or `/music on` and `/music off`.
 
 **F1 auto-publish ON** also enables automatic rendering: the first clip is queued immediately, and subsequent clips from that job wait two hours after the preceding clip actually publishes. **OFF** gives every finished clip Publish now / Reject buttons. Turning it off holds queued automatic posts for approval. A manual approval publishes immediately, removing its scheduled delay. API processing can add a short delay. A failed predecessor holds later clips until resolved or individually approved.
 

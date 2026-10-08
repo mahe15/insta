@@ -2,14 +2,20 @@
 
 Restart the bot with `scripts/start.ps1` after stopping the old process with Ctrl+C. Keep only one bot process running. Send `/start` to get the updated dashboard. Existing credentials, character mappings and saved preferences are retained; new fields receive their model defaults.
 
+## September 27 long-stream upgrade
+
+The local configuration now permits 24-hour sources and the expanded platform list. New normal-link jobs use captions or budgeted audio scans. Existing completed jobs keep their existing analysis; submit a new job to use the new route. `/scan 24`, `/scan 60` and `/focus HH:MM:SS` control discovery. Partial coverage is explicit, and `/focus clear` removes timestamps before an unrelated source. Full details and references are in [LONG_STREAM_ARCHITECTURE.md](LONG_STREAM_ARCHITECTURE.md).
+
+YuNet is installed and hash-verified on this machine. On another machine, install current project dependencies with `python -m pip install -e '.[gpu,browser]'`, then run `python -m cliper.face_model`. The downloader now includes its curl-cffi extra for Kick. `FACE_MODEL_PATH`, `LONG_SOURCE_MINUTES` and `SCAN_DOWNLOAD_WORKERS` are documented in `.env.example`. No Chromium profile migration or new login setup is part of this upgrade.
+
 ## Clipping improvements
 
 - The white hook stays directly above a filled 1:1 video on the vertical black canvas. Smart crop follows detected face groups. **Preserve wide groups** is optional: it fits a wide shot inside the square when a detected group would otherwise be cut off. This is face detection, not active-speaker recognition.
 - Shortlists contain three proposed hook alternatives and a **Review hook / quality** button. Select an alternative before rendering. Local checks catch invented numbers, dense titles, repeated speech, low transcript confidence, long pauses and context-dependent openings. These are heuristics, not a probability of going viral.
 - Safe edge trimming removes only excess leading/trailing time when the result still fits the selected duration. Sentence-aware caption groups reduce awkward persistence. There are no automatic internal jump cuts that could change meaning.
-- Music stays at 20% gain, with fades and optional speech ducking. Empty categories still work without music.
+- Music is normalized before 20% gain, with fades and optional speech ducking. Editing controls also offer 10% and 15%. Empty categories still work without music.
 - Quality checks decode the entire export, check dimensions/duration/audio and sample the video content for black/static intervals. Intentional still shots are reported for review. Almost entirely black output is rejected. Each render saves a suggested cover JPEG.
-- Render caches now include the source, actual clip details, transcript, music inventory and editing settings. Remote analysis downloads audio only; later extraction downloads selected video ranges.
+- Render caches include the source, actual clip details, transcript, music inventory, face model and editing settings. Remote analysis uses captions or bounded audio windows; later extraction downloads selected video ranges.
 
 ## Faceless carousel improvements
 

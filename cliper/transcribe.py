@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 from .hardware import check_cuda
@@ -11,8 +12,9 @@ from .storage import write_json
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("audio")
-    parser.add_argument("output", type=Path)
+    parser.add_argument("audio", nargs="?")
+    parser.add_argument("output", type=Path, nargs="?")
+    parser.add_argument("--manifest", type=Path)
     parser.add_argument("--model", default="small")
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--compute", default="int8")
@@ -21,6 +23,8 @@ def main():
     parser.add_argument("--cache", required=True)
     parser.add_argument("--beam-size", type=int, default=5)
     args = parser.parse_args()
+    if not args.manifest and (not args.audio or not args.output):
+        parser.error("Supply audio and output, or --manifest")
     if args.device == "cuda":
         check_cuda(args.device_index, args.compute)
     from faster_whisper import WhisperModel
@@ -28,8 +32,14 @@ def main():
     model = WhisperModel(args.model, device=args.device, compute_type=args.compute,
                          device_index=args.device_index, download_root=args.cache, cpu_threads=4)
     print(f"Whisper: device={model.model.device}, compute={model.model.compute_type}", flush=True)
+    jobs = json.loads(args.manifest.read_text("utf-8")) if args.manifest else [{"audio": args.audio, "output": str(args.output)}]
+    for job in jobs:
+        transcribe_file(model, job["audio"], Path(job["output"]), args)
+
+
+def transcribe_file(model, audio, output, args):
     segments, info = model.transcribe(
-        args.audio, beam_size=args.beam_size, word_timestamps=True, vad_filter=True,
+        audio, beam_size=args.beam_size, word_timestamps=True, vad_filter=True,
         language=None if args.language == "auto" else args.language,
         condition_on_previous_text=False, vad_parameters={"min_silence_duration_ms": 500})
     result = []
@@ -57,8 +67,8 @@ def main():
         print(f"Transcribed {segment.end:.0f}s", flush=True)
     flush()
     transcript = Transcript(language=info.language, duration=info.duration, segments=result)
-    write_json(args.output, transcript.model_dump())
-    write_json(args.output.with_suffix(".runtime.json"), {"device": model.model.device,
+    write_json(output, transcript.model_dump())
+    write_json(output.with_suffix(".runtime.json"), {"device": model.model.device,
                                                         "compute_type": model.model.compute_type,
                                                         "device_index": args.device_index,
                                                         "beam_size": args.beam_size,

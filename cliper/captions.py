@@ -22,7 +22,7 @@ def safe_ass(text: str) -> str:
     return re.sub(r"[\x00-\x1f]", " ", text).replace("\\", "／").replace("{", "(").replace("}", ")")
 
 
-def chunks(transcript: Transcript, clip: Clip) -> list[list[Word]]:
+def chunks(transcript: Transcript, clip: Clip, max_words: int = 5) -> list[list[Word]]:
     groups, group = [], []
     for segment in transcript.segments:
         for w in segment.words:
@@ -30,7 +30,7 @@ def chunks(transcript: Transcript, clip: Clip) -> list[list[Word]]:
                 continue
             word = Word(start=max(0, w.start - clip.start), end=min(clip.end, w.end) - clip.start,
                         text=w.text)
-            if group and (len(group) >= 5 or sum(len(x.text) + 1 for x in group) + len(w.text) > 30
+            if group and (len(group) >= max_words or sum(len(x.text) + 1 for x in group) + len(w.text) > 30
                           or word.start - group[-1].end > .5 or word.end - group[0].start > 2.5
                           or re.search(r"[.!?。！？][\"'’”]*$", group[-1].text)):
                 groups.append(group)
@@ -73,7 +73,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         events.append(f"Dialogue: 1,0:00:00.00,{ass_time(clip.end - clip.start)},Default,,0,0,0,,"
                       + f"{{\\an2\\pos({width // 2},{top - round(width * .035)})"
                       + f"\\fnArial\\fs{round(width * .05 * 30 / columns)}\\b1\\1c&H00FFFFFF&\\bord0\\shad0}}{title}")
-    for group in chunks(transcript, clip) if prefs.captions else []:
+    for group in chunks(transcript, clip, 3 if prefs.editorial_profile == "ishowspeed" else 5) if prefs.captions else []:
         plain = " ".join(w.text for w in group)
         srt.append(f"{len(srt) + 1}\n{srt_time(group[0].start)} --> {srt_time(group[-1].end)}\n{plain}\n")
         if prefs.style == "minimal":

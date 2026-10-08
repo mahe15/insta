@@ -5,6 +5,7 @@ import json
 import math
 import shutil
 import sys
+import wave
 from pathlib import Path
 
 from .config import Config
@@ -48,7 +49,7 @@ async def execute(args, directory, cfg, cancelled, timeout: int = 600):
 
 async def audio(url: str, directory: Path, cfg: Config, cancelled) -> tuple[Path, dict]:
     args = arguments(url, cfg, "audio-source") + ["--max-filesize", f"{cfg.max_download_mb}M",
-                                                "--format", "bestaudio/best", "--", url]
+                                                "--format", "bestaudio", "--", url]
     await execute(args, directory, cfg, cancelled)
     info_path = directory / "audio-source.info.json"
     if not info_path.is_file():
@@ -58,7 +59,7 @@ async def audio(url: str, directory: Path, cfg: Config, cancelled) -> tuple[Path
     if not math.isfinite(duration) or not 0 < duration <= cfg.max_source_minutes * 60 or info.get("is_live"):
         raise ValueError("Source duration is missing, live, or exceeds the configured limit")
     files = [p for p in directory.glob("audio-source.*") if p.suffix in {".m4a", ".webm", ".mp3", ".opus", ".ogg", ".aac", ".wav", ".flac", ".mp4", ".mkv"}]
-    if not files:
+    if len(files) != 1:
         raise ValueError("No unambiguous audio source was downloaded")
     return files[0].resolve(), {"duration": duration, "audio": True, "title": info.get("title", "Video")}
 
@@ -69,14 +70,80 @@ async def metadata(url: str, directory: Path, cfg: Config, cancelled) -> dict:
     await execute(arguments(url, cfg, "source", filter_duration=False) + ["--skip-download", "--", url], directory, cfg, cancelled)
     path = directory / "source.info.json"
     if not path.is_file():
-        raise ValueError("YouTube metadata is unavailable. Check that the video is public and accessible.")
+        raise ValueError("Video metadata is unavailable. Send a public, saved VOD or clip URL.")
     info = json.loads(path.read_text("utf-8"))
     duration = float(info.get("duration") or 0)
-    if not math.isfinite(duration) or duration <= 0 or info.get("is_live"):
+    if not math.isfinite(duration) or duration <= 0 or info.get("is_live") or info.get("live_status") in {"is_live", "is_upcoming"}:
         raise ValueError("Source is live or missing its duration")
     if duration > cfg.max_source_minutes * 60:
         raise ValueError(f"Source duration ({round(duration / 60, 1)}m) exceeds MAX_SOURCE_MINUTES ({cfg.max_source_minutes}m). Set MAX_SOURCE_MINUTES={math.ceil(duration / 60)} in your .env to process this video.")
-    return {"duration": duration, "title": info.get("title", "Video"), "id": info.get("id"), "audio": True}
+    return {"duration": duration, "title": info.get("title", "Video"), "id": info.get("id"), "audio": True,
+            "extractor": info.get("extractor_key", info.get("extractor", "unknown")),
+            "chapters": info.get("chapters") or [], "heatmap": info.get("heatmap") or [],
+            "language": info.get("language"), "subtitles": list((info.get("subtitles") or {}).keys()),
+            "automatic_captions": list((info.get("automatic_captions") or {}).keys())}
+
+
+async def captions(url, directory, info, language, cfg, cancelled):
+    """Fetch one advertised text track, not media, with a bounded response on disk."""
+    manual = info.get("subtitles", [])
+    automatic = info.get("automatic_captions", [])
+    wanted = language if language != "auto" else info.get("language")
+    candidates = [wanted, (wanted or "").split("-")[0], "en", "en-orig"]
+    available = manual + automatic
+    chosen = next((x for x in candidates if x and x in available), None)
+    if chosen is None and language == "auto":
+        chosen = next((x for x in available if x != "live_chat"), None)
+    if chosen is None:
+        return None
+    directory.mkdir(parents=True, exist_ok=True)
+    for path in directory.glob("captions.*.vtt"):
+        path.unlink()
+    args = arguments(url, cfg, "captions", filter_duration=False) + ["--skip-download", "--sub-format", "vtt",
+        "--sub-langs", re_escape(chosen), "--write-subs" if chosen in manual else "--write-auto-subs", "--", url]
+    await execute(args, directory, cfg, cancelled, timeout=180)
+    paths = list(directory.glob("captions.*.vtt"))
+    if len(paths) != 1 or paths[0].stat().st_size > 10 * 1024**2:
+        return None
+    return paths[0], chosen
+
+
+def re_escape(value):
+    import re
+    return re.escape(value)
+
+
+async def audio_window(url, directory, start, end, cfg, cancelled):
+    """Accurately decode only this interval's audio; never save a whole VOD video."""
+    if not all(math.isfinite(x) for x in (start, end)) or not 0 <= start < end <= cfg.max_source_minutes * 60:
+        raise ValueError("Invalid scan interval")
+    directory.mkdir(parents=True, exist_ok=True)
+    marker, target = directory / "audio-range.json", directory / "scan.wav"
+    expected = {"version": 1, "url": url, "start": start, "end": end}
+    def valid():
+        try:
+            with wave.open(str(target)) as wav:
+                return abs(wav.getnframes() / wav.getframerate() - (end - start)) <= .75
+        except (OSError, EOFError, wave.Error):
+            return False
+    if marker.exists() and json.loads(marker.read_text("utf-8")) == expected and valid():
+        return target.resolve()
+    acquired = directory / "scan-input.m4a"
+    acquired.unlink(missing_ok=True)
+    args = arguments(url, cfg, "scan-input.m4a")
+    # A fixed filename is intentional: the downloader output is explicitly an audio-only MP4 container.
+    args[args.index("--output") + 1] = acquired.name
+    args += ["--format", "bestaudio/b[height<=360]/worst", "--fixup", "never", "--force-overwrites",
+             "--downloader", "ffmpeg", "--download-sections", f"*{start:.3f}-{end:.3f}",
+             "--downloader-args", "ffmpeg_o:-vn -c:a aac -b:a 64k -ac 1 -ar 16000 -f ipod", "--", url]
+    await execute(args, directory, cfg, cancelled, timeout=max(600, int(end - start) * 3))
+    await run([cfg.ffmpeg(), "-v", "error", "-nostdin", "-y", "-i", str(acquired), "-map", "0:a:0",
+               "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(target)], cancelled=cancelled)
+    if not valid():
+        raise ValueError("Audio scan duration does not match its requested interval; refusing misaligned timestamps")
+    write_json(marker, expected)
+    acquired.unlink(missing_ok=True)
+    return target.resolve()
 
 
 async def section(url: str, directory: Path, start: float, end: float, cfg: Config, cancelled) -> Path:

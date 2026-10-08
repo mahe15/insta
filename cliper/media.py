@@ -112,7 +112,8 @@ def filter_graph(prefs: Preferences, face: dict, subtitle: str, force_blur=False
     mode = prefs.reframe
     if prefs.layout == "square_hook":
         mode = "square_hook"
-        if prefs.smart_crop and prefs.preserve_wide_groups and face.get("square_mode") == "fit":
+        if force_blur or (prefs.preserve_wide_groups and (face.get("square_mode") == "fit"
+                or face.get("height", 0) > face.get("width", 0))):
             graph = (f"[0:v]scale={w}:{w}:force_original_aspect_ratio=decrease,"
                      f"pad={w}:{w}:(ow-iw)/2:(oh-ih)/2:color=black,")
         else:
@@ -150,10 +151,8 @@ async def quality_check(path: Path, clip: Clip, prefs: Preferences, cfg: Config,
     if path.stat().st_size >= 49_000_000:
         raise ValueError("Output exceeds the Telegram delivery budget")
     # Inspect every frame. A sample cannot justify a 'full_decode' result.
-    await run([cfg.ffmpeg(), "-v", "error", "-xerror", "-nostdin", "-i", str(path),
-               "-f", "null", "-"], cancelled=cancelled, timeout=300)
-    volume = await run([cfg.ffmpeg(), "-hide_banner", "-nostdin", "-i", str(path),
-                        "-vn", "-af", "volumedetect", "-f", "null", "-"], cancelled=cancelled, timeout=120)
+    volume = await run([cfg.ffmpeg(), "-hide_banner", "-xerror", "-nostdin", "-i", str(path),
+                        "-af", "volumedetect", "-f", "null", "-"], cancelled=cancelled, timeout=300)
     match = re.search(r"max_volume: ([\-\w.]+) dB", volume)
     if not match:
         raise ValueError("Output audio level could not be measured")
@@ -183,14 +182,20 @@ def video_encoder_args(cfg: Config, bitrate: int, fast: bool = False) -> list[st
 async def render(source: Path, directory: Path, transcript: Transcript, clip: Clip,
                  prefs: Preferences, cfg: Config, cancelled) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
+    from .display_text import prepare
+    from .speed_edit import plan
+    transcript, clip, text_report = await prepare(transcript, clip, prefs, cfg, directory, cancelled)
+    edit_plan = await plan(source, directory, clip, prefs, cfg, cancelled)
     ass = write_captions(directory, transcript, clip, prefs)
     face_path = directory / f"clip_{clip.id:02}.vision.json"
     if prefs.reframe == "auto" and (prefs.layout == "legacy" or prefs.smart_crop):
         await run([sys.executable, "-m", "cliper.vision", str(source), str(clip.start), str(clip.end),
-                   str(face_path)], cancelled=cancelled, timeout=300)
+                   "--model", str(cfg.face_model_path.resolve()), str(face_path)], cancelled=cancelled, timeout=300)
         face = json.loads(face_path.read_text(encoding="utf-8"))
     else:
         face = {}
+    if prefs.editorial_profile == "ishowspeed" and clip.moment_type in {"challenge", "football"}:
+        face["square_mode"] = "fit"
     length = clip.end - clip.start
     from .music import choose
     track_note = directory / f"clip_{clip.id:02}.music.json"
@@ -204,7 +209,7 @@ async def render(source: Path, directory: Path, transcript: Transcript, clip: Cl
         if track is None:
             track = choose(cfg.music_dir, clip.music_category)
         write_json(track_note, {"category": clip.music_category, "path": str(track) if track else None,
-                                "gain": 0.2, "status": "selected" if track else "category folder is empty"})
+                                "gain": prefs.music_gain, "status": "selected" if track else "category folder is empty"})
     # Limit peak video bitrate with ample mux/audio headroom for Telegram's cloud API.
     bitrate = min(6500, int((43_000_000 * 8 / length) / 1000) - 160)
     target = directory / f"clip_{clip.id:02}.mp4"
@@ -212,22 +217,21 @@ async def render(source: Path, directory: Path, transcript: Transcript, clip: Cl
     for attempt in range(2):
         graph, mode = filter_graph(prefs, face, ass.name, force_blur=bool(attempt))
         audio_map = ["-map", "0:a:0", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11"]
-        if track:
-            graph += (";[0:a]loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000[voice];"
-                      f"[1:a]volume=0.20,afade=t=in:d=0.25,afade=t=out:st={max(0, length - .6):.3f}:d=0.6[music];")
-            if prefs.music_ducking:
-                graph += ("[voice]asplit=2[speech][side];[music][side]sidechaincompress="
-                          "threshold=0.025:ratio=6:attack=15:release=250:makeup=1[ducked];"
-                          "[speech][ducked]")
-            else:
-                graph += "[voice][music]"
-            graph += ("amix=inputs=2:duration=first:"
-                      "dropout_transition=0:normalize=0,alimiter=limit=0.95:level=false[aout]")
+        audio_inputs = []
+        if track or edit_plan["effects"]:
+            from .speed_edit import audio_graph
+            audio_filters, audio_inputs = audio_graph(track, edit_plan, length, prefs)
+            graph += audio_filters
             audio_map = ["-map", "[aout]"]
+        if edit_plan["zoom"] and face.get("square_mode") != "fit":
+            beat = edit_plan["zoom"][0]
+            w, h = prefs.width, prefs.width * 16 // 9
+            factor = f"1+0.06*between(t,{beat['start']:.3f},{beat['end']:.3f})"
+            graph = graph.replace("[framed]setsar=1", f"[framed]scale=w='ceil({w}*({factor})/2)*2':h='ceil({h}*({factor})/2)*2':eval=frame,crop={w}:{h},setsar=1")
         filter_threads = str(min(8, max(2, os.cpu_count() or 4)))
         await run([cfg.ffmpeg(), "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
                    "-ss", f"{clip.start:.3f}", "-i", str(source),
-                   *(["-stream_loop", "-1", "-i", str(track)] if track else []), "-t", f"{length:.3f}",
+                   *audio_inputs, "-t", f"{length:.3f}",
                    "-filter_complex_threads", filter_threads, "-filter_complex", graph,
                    "-map", "[out]", *audio_map,
                    *video_encoder_args(cfg, bitrate),
@@ -249,8 +253,9 @@ async def render(source: Path, directory: Path, transcript: Transcript, clip: Cl
             "clip": clip.model_dump(), "preferences": prefs.model_dump(), "render": {"layout": mode, "captions": prefs.captions,
                                                  "style": prefs.style, "encoder": cfg.video_encoder,
                                                  "preserve_wide_groups": prefs.preserve_wide_groups}, "quality": qa,
-            "music": {"category": clip.music_category, "file": str(track) if track else None, "gain": .2,
+            "music": {"category": clip.music_category, "file": str(track) if track else None, "gain": prefs.music_gain,
+                      "normalized": bool(track and prefs.music_normalize),
                       "ducking": bool(track and prefs.music_ducking), "fades": bool(track)},
-            "vision": face, "review_note": "Automated technical QA; editorial and face visibility review advised."})
+            "speed_edit": edit_plan, "display_text": text_report, "vision": face, "review_note": "Automated technical QA; editorial and face visibility review advised."})
         return target
     raise ValueError("Could not produce a valid export")

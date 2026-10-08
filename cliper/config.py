@@ -7,6 +7,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from .platforms import DEFAULT_HOSTS
+
 PROVIDERS = ("openai", "xai", "gemini", "chatgpt_browser", "heuristic")
 
 
@@ -50,13 +52,16 @@ class Config:
     gpu_device_index: int = 0
     video_encoder: str = "libx264"
     ffmpeg_path: str = ""
-    max_source_minutes: int = 120
+    max_source_minutes: int = 1440
+    long_source_minutes: int = 45
+    scan_download_workers: int = 2
+    face_model_path: Path = Path("data/models/face_detection_yunet_2023mar.onnx")
     max_download_mb: int = 1500
     min_free_disk_mb: int = 3000
     max_active_jobs: int = 3
     retention_days: int = 7
     music_dir: Path = Path("music")
-    allowed_hosts: tuple[str, ...] = ("youtube.com", "youtu.be", "vimeo.com", "twitch.tv")
+    allowed_hosts: tuple[str, ...] = DEFAULT_HOSTS
     skip_image_qa: bool = False
 
     @classmethod
@@ -85,8 +90,11 @@ class Config:
             video_encoder=os.getenv("VIDEO_ENCODER", "libx264").strip().lower(),
             ffmpeg_path=os.getenv("FFMPEG_PATH", ""),
             music_dir=Path(os.getenv("MUSIC_DIR", "music")).resolve(),
+            long_source_minutes=int(os.getenv("LONG_SOURCE_MINUTES", "45")),
+            scan_download_workers=int(os.getenv("SCAN_DOWNLOAD_WORKERS", "2")),
+            face_model_path=Path(os.getenv("FACE_MODEL_PATH", "data/models/face_detection_yunet_2023mar.onnx")).resolve(),
             allowed_hosts=tuple(x.strip().lower() for x in os.getenv(
-                "ALLOWED_VIDEO_HOSTS", "youtube.com,youtu.be,vimeo.com,twitch.tv").split(",") if x.strip()),
+                "ALLOWED_VIDEO_HOSTS", ",".join(DEFAULT_HOSTS)).split(",") if x.strip()),
             skip_image_qa=os.getenv("CLIPER_SKIP_IMAGE_QA", "false").lower() in ("1", "true", "yes"),
         )
         for attr in ("max_source_minutes", "max_download_mb", "min_free_disk_mb", "max_active_jobs",
@@ -95,6 +103,8 @@ class Config:
             if getattr(cfg, attr) < 1:
                 raise ValueError(f"{attr.upper()} must be positive")
         cfg.data_dir.mkdir(parents=True, exist_ok=True)
+        if not 1 <= cfg.scan_download_workers <= 3 or cfg.long_source_minutes < 1:
+            raise ValueError("SCAN_DOWNLOAD_WORKERS must be 1–3; LONG_SOURCE_MINUTES must be positive")
         if cfg.browser_timeout < 10 or cfg.browser_max_chars < 8000:
             raise ValueError("CHATGPT_BROWSER_TIMEOUT must be >= 10; CHATGPT_BROWSER_MAX_CHARS must be >= 8000")
         os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(cfg.data_dir / "browsers" / "engines"))

@@ -3,8 +3,8 @@ import hashlib
 import json
 from pathlib import Path
 
-RENDER_VERSION = "square-studio-v3"
-CAROUSEL_VERSION = "carousel-studio-v3"
+RENDER_VERSION = "square-studio-v5-speed-latin"
+CAROUSEL_VERSION = "carousel-studio-v4-payoff"
 
 
 def digest(value):
@@ -21,8 +21,11 @@ def file_identity(path):
 
 def export_identity(reference, transcript, clip, prefs, cfg):
     inventory = []
+    from .speed_edit import ASSETS
+    sounds = [file_identity(p) for p in sorted(ASSETS.glob("*.wav"))] if prefs.editorial_profile == "ishowspeed" else []
     if prefs.music and cfg.music_dir.exists():
         inventory = [file_identity(p) for p in sorted(cfg.music_dir.glob("*/*")) if p.is_file() and not p.is_symlink()]
     return digest({"version": RENDER_VERSION, "source": reference, "source_file": file_identity(reference["path"]),
                    "transcript": transcript.model_dump(), "clip": clip.model_dump(), "preferences": prefs.model_dump(),
-                   "encoder": cfg.video_encoder, "gpu": cfg.gpu_device_index, "music": inventory})
+                   "encoder": cfg.video_encoder, "gpu": cfg.gpu_device_index, "music": inventory, "sound_effects": sounds,
+                   "face_model": file_identity(cfg.face_model_path)})

@@ -33,14 +33,32 @@ class Pipeline:
                       progress: Callable[[str], Awaitable[None]], cancelled=lambda: False) -> Analysis:
         directory.mkdir(parents=True, exist_ok=True)
         self.cfg.check_disk()
+        if prefs.editorial_profile == "ishowspeed" and source_input.startswith("https://"):
+            from .gemini_clipping import youtube_url
+            source_input = youtube_url(source_input)
         cache = directory / "analysis.json"
         if cache.exists():
             return Analysis.model_validate_json(cache.read_text(encoding="utf-8"))
         if prefs.clipping_mode == "gemini_browser":
             from .gemini_clipping import analyze
-            return await analyze(source_input, directory, prefs, self.cfg, progress, cancelled)
+            try:
+                return await analyze(source_input, directory, prefs, self.cfg, progress, cancelled)
+            except ValueError as exc:
+                exc_str = str(exc)
+                if ("could not access this video" in exc_str.lower()
+                        or "returned no usable complete clips" in exc_str.lower()
+                        or "accessible=false" in exc_str.lower()):
+                    await progress(f"{exc_str} · Falling back to audio-first clipping")
+                    log.warning("Gemini browser clipping unavailable (%s); falling back to audio-first pipeline", exc)
+                    prefs = prefs.model_copy(update={"clipping_mode": "audio_first"})
+                else:
+                    raise
         self.cfg.check_ai(prefs.ai_provider, prefs.ai_model)
         reference = directory / "source.json"
+        if source_input.startswith("https://") and (not reference.exists() or
+                json.loads(reference.read_text("utf-8")).get("kind") == "remote_index"):
+            from .stream_scan import analyze
+            return await analyze(source_input, directory, prefs, self.cfg, progress, cancelled)
         if reference.exists():
             source = Path(json.loads(reference.read_text(encoding="utf-8"))["path"])
             if not source.is_file():
@@ -84,8 +102,10 @@ class Pipeline:
         reference = json.loads((directory / "source.json").read_text(encoding="utf-8"))
         source = Path(reference["path"])
         transcript = Transcript.model_validate_json((directory / "transcript.json").read_text(encoding="utf-8"))
+        from .display_text import display_clip
+        clip = display_clip(clip, prefs, transcript.language)
         verified_transcript = None
-        if reference.get("kind") == "remote_gemini" and prefs.gemini_verify_captions:
+        if reference.get("kind") == "remote_index" or (reference.get("kind") == "remote_gemini" and prefs.gemini_verify_captions):
             from .gemini_clipping import verify_range
             source, verified_transcript = await verify_range(reference, directory, clip, prefs, self.cfg, cancelled)
         output = directory / "clips" / f"clip_{clip.id:02}.mp4"
@@ -102,7 +122,7 @@ class Pipeline:
                 return output
             except (ValueError, RuntimeError, OSError, KeyError):
                 log.warning("Cached export failed validation; rendering again")
-        if reference.get("kind") in {"remote_audio", "remote_gemini"}:
+        if reference.get("kind") in {"remote_audio", "remote_gemini", "remote_index"}:
             from .models import Segment, Word
             from .remote_media import section
             if verified_transcript is None:
@@ -119,7 +139,8 @@ class Pipeline:
             transcript = Transcript(language=transcript.language, duration=clip.end - clip.start, segments=segments)
             if verified_transcript is not None:
                 transcript = verified_transcript
-            clip = clip.model_copy(update={"start": 0, "end": clip.end - clip.start})
+            clip = clip.model_copy(update={"start": 0, "end": clip.end - clip.start,
+                "payoff_time": clip.payoff_time - clip.start if clip.payoff_time is not None else None})
             output = await media.render(source, directory / "clips", transcript, clip, prefs, self.cfg, cancelled)
             meta_path = output.with_suffix(".json")
             metadata = json.loads(meta_path.read_text("utf-8"))
@@ -137,12 +158,13 @@ class Pipeline:
 
 class Worker:
     """One durable worker per data directory, with cooperative cancellation at every stage."""
-    def __init__(self, cfg: Config, store: Store, notify, shortlist, deliver):
+    def __init__(self, cfg: Config, store: Store, notify, shortlist, deliver, *, web_only=False):
         self.cfg, self.store = cfg, store
         self.pipeline = Pipeline(cfg)
         self.notify, self.shortlist, self.deliver = notify, shortlist, deliver
         self.stopping = asyncio.Event()
         self.current: asyncio.Task | None = None
+        self.web_only = web_only
 
     async def process(self, job: dict):
         job_id = job["id"]
@@ -181,6 +203,8 @@ class Worker:
         delivery_task = None
 
         async def deliver_and_record(clip_obj, out_path, clip_num, total_count):
+            from .display_text import display_clip
+            clip_obj = display_clip(clip_obj, prefs, analysis.language)
             await progress(f"Sending clip {clip_num}/{total_count}")
             await self.deliver(job, clip_obj, out_path)
             delivered.append(clip_obj.id)
@@ -215,9 +239,9 @@ class Worker:
             log.warning("Completion notification unavailable for job %s", job_id)
 
     async def run(self):
-        self.store.recover()
+        self.store.recover(web_only=True) if self.web_only else self.store.recover()
         while not self.stopping.is_set():
-            job = self.store.claim()
+            job = self.store.claim(web_only=True) if self.web_only else self.store.claim()
             if not job:
                 try:
                     await asyncio.wait_for(self.stopping.wait(), timeout=1)

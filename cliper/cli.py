@@ -173,7 +173,8 @@ async def local(cfg: Config, args):
     cfg.check_ai()
     store = Store(cfg.data_dir)
     prefs = cfg.snapshot_ai(Preferences(clips=args.clips, min_seconds=args.min_seconds, max_seconds=args.max_seconds,
-                                       width=args.width, reframe=args.reframe))
+                                       width=args.width, reframe=args.reframe, scan_minutes=args.scan_minutes,
+                                       focus_times=args.focus))
     source = args.source if args.source.startswith("https://") else str(Path(args.source).resolve())
     job = store.create(0, 0, source, prefs, cfg.max_active_jobs)
     directory = store.directory(job["id"])
@@ -205,8 +206,16 @@ def main():
     parser = argparse.ArgumentParser(prog="cliper", description="Your private Telegram clip studio")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("bot", help="Start Telegram polling and the persistent worker")
+    web = sub.add_parser("web", help="Open the local CLIPER Studio web workspace")
+    web.add_argument("--host", default="0.0.0.0", help="Network host interface to bind to (e.g. 0.0.0.0 or 127.0.0.1)")
+    web.add_argument("--port", type=int, default=8788)
+    web.add_argument("--no-engine", action="store_true", help="Serve controls without starting workers")
+    web.add_argument("--open", action="store_true", help="Open the authenticated workspace in your browser")
     sub.add_parser("browser-login", help="Open CLIPER's Chromium profile for manual ChatGPT login")
     sub.add_parser("gemini-login", help="Verify Gemini in the configured shared browser session")
+    sub.add_parser("x-login", help="Sign in to X in the existing shared Chromium profile")
+    yt_auth = sub.add_parser("youtube-auth", help="Authorize a YouTube account using OAuth in your local browser")
+    yt_auth.add_argument("--account", default="main", help="Account identifier key in config/youtube.json (e.g. main, gaming, shorts)")
     server = sub.add_parser("serve-media", help="Serve only staged Instagram media behind your HTTPS reverse proxy")
     server.add_argument("--host", default="127.0.0.1")
     server.add_argument("--port", type=int, default=8787)
@@ -220,6 +229,9 @@ def main():
     sample.add_argument("--diagnostic", action="store_true", help="Explicitly use color bars, a tone and fixture captions")
     process = sub.add_parser("run", help="Process a local video or supported URL")
     process.add_argument("source")
+    process.add_argument("--scan-minutes", type=int, default=24, help="Long-VOD discovery budget; final clips are verified separately")
+    from .stream_scan import timestamp
+    process.add_argument("--focus", type=timestamp, nargs="*", default=[], help="Prioritize HH:MM:SS timestamps")
     process.add_argument("--provider", type=normalize_provider, choices=PROVIDERS)
     process.add_argument("--transcript", type=Path, help="Use an existing validated word-timed transcript JSON")
     process.add_argument("--clips", type=int, default=5)
@@ -236,6 +248,10 @@ def main():
         if getattr(args, "provider", None):
             cfg = replace(cfg, provider=args.provider)
         configure_logging(cfg)
+        if args.command == "web":
+            from .web import serve
+            serve(cfg, host=args.host, port=args.port, no_engine=args.no_engine, open_browser=args.open)
+            return
         if args.command == "doctor":
             sys.exit(0 if asyncio.run(doctor(cfg, args.online)) else 2)
         if args.command == "browser-login":
@@ -245,6 +261,14 @@ def main():
         if args.command == "gemini-login":
             from .gemini_images import login
             asyncio.run(login(cfg))
+            return
+        if args.command == "x-login":
+            from .x_browser import login
+            asyncio.run(login(cfg))
+            return
+        if args.command == "youtube-auth":
+            from .youtube_publishing import run_cli_auth
+            asyncio.run(run_cli_auth(args.account, cfg))
             return
         if args.command == "serve-media":
             from .public_media import serve

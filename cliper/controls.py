@@ -25,12 +25,15 @@ class Controls:
         text = (f"CLIPER control center · {p.active_feature.upper()}\n"
                 f"AI: {ai.provider}\nF1: square clips + hook title · music {'on' if p.music else 'off'}\n"
                 f"F1 publishing: {'automatic' if p.auto_publish else 'approve each clip'}\n"
-                f"Clipping: {'using Gemini website' if p.clipping_mode == 'gemini_browser' else 'audio-first'}\n"
+                f"Clipping: {'using Gemini website' if p.clipping_mode == 'gemini_browser' else 'caption-first / stream scan'}\n"
+                f"Long-stream scan budget: {p.scan_minutes} minutes\n"
                 f"F2 publishing: {'automatic' if p.f2_auto_publish else 'approve each carousel'}\n"
+                f"F2 Image QA: {'OFF (skip QA & approve all images)' if p.f2_skip_image_qa else 'ON (Gemini QA)'}\n"
                 f"Selected niche: {NICHES.get(p.selected_niche, p.selected_niche)}")
         rows = [
+            [Button("IShowSpeed studio · 6–60s", callback_data="ui:speed")],
             [Button("Clipping using Gemini", callback_data="ui:clipmode:gemini_browser"),
-             Button("Audio-first clipping", callback_data="ui:clipmode:audio_first")],
+             Button("Normal / stream clipping", callback_data="ui:clipmode:audio_first")],
             [Button(f"Gemini: {'GPU caption correction' if p.gemini_verify_captions else 'fast captions / manual review'}",
                     callback_data="ui:toggle:gemini_verify_captions")],
             [Button("F1 · Clips", callback_data="ui:mode:f1"), Button("F2 · Carousels", callback_data="ui:mode:f2"),
@@ -39,6 +42,7 @@ class Controls:
              Button(f"F2 {'ON' if p.f2_enabled else 'OFF'}", callback_data="ui:toggle:f2_enabled")],
             [Button(f"F1 auto-publish {'ON' if p.auto_publish else 'OFF'}", callback_data="ui:toggle:auto_publish"),
              Button(f"F2 auto-publish {'ON' if p.f2_auto_publish else 'OFF'}", callback_data="ui:toggle:f2_auto_publish")],
+            [Button(f"F2 QA {'OFF (Skip)' if p.f2_skip_image_qa else 'ON'}", callback_data="ui:toggle:f2_skip_image_qa")],
             [Button(f"Music {'ON' if p.music else 'OFF'}", callback_data="ui:toggle:music"),
              Button(f"Captions {'ON' if p.captions else 'OFF'}", callback_data="ui:toggle:captions")],
             [Button("AI provider", callback_data="ui:providers"), Button("Niches", callback_data="ui:niches")],
@@ -71,17 +75,21 @@ class Controls:
                 p = Preferences.model_validate(p.model_dump() | {"clipping_mode": parts[2], "f1_enabled": True})
                 await q.message.reply_text("Send a YouTube video link. Gemini website mode needs its saved login; "
                     "it downloads only selected ranges. Fast captions require review before publishing."
-                    if p.clipping_mode == "gemini_browser" else "Audio-first clipping selected. Send a video link or upload.")
+                    if p.clipping_mode == "gemini_browser" else "Normal clipping selected. Send a public video or VOD link. "
+                    "Use /platforms, /scan or /focus for long streams.")
             elif action == "mode":
                 p = Preferences.model_validate(p.model_dump() | {"active_feature": parts[2],
                     "f1_enabled": parts[2] in {"f1", "both"}, "f2_enabled": parts[2] in {"f2", "both"}})
             elif action == "toggle":
                 key = parts[2]
-                if key not in {"f1_enabled", "f2_enabled", "auto_publish", "f2_auto_publish", "music", "captions", "auto_render", "smart_crop", "music_ducking", "trim_edges", "preserve_wide_groups", "gemini_verify_captions"}:
+                if key not in {"f1_enabled", "f2_enabled", "auto_publish", "f2_auto_publish", "f2_skip_image_qa", "music", "captions", "auto_render", "smart_crop", "music_ducking", "trim_edges", "preserve_wide_groups", "gemini_verify_captions"}:
                     raise ValueError("Unknown toggle")
                 p = p.model_copy(update={key: not getattr(p, key)})
                 if key in {"auto_publish", "f2_auto_publish"} and not getattr(p, key):
                     self.publications.hold_auto(owner, "f1" if key == "auto_publish" else "f2")
+            elif action == "speed":
+                await q.message.reply_text("Send /speedclip YOUTUBE_URL for a dedicated English IShowSpeed project (6–60s). Review the shortlist and render as usual. Open Speed Studio on the web for duration, sound and engine controls.")
+                return
             elif action == "providers":
                 await q.message.reply_text("Choose the AI provider for new jobs", reply_markup=Keyboard([
                     [Button(name, callback_data=f"ui:provider:{name}")] for name in PROVIDERS]))
@@ -120,6 +128,8 @@ class Controls:
                 await q.message.reply_text("Choose clip count, duration, title style or editing controls. "
                     "Use short clips for a single insight and longer clips when the story needs context.", reply_markup=Keyboard([
                     [Button(f"{n} clips", callback_data=f"ui:setting:clips:{n}") for n in (1, 3, 5, 10)],
+                    [Button(f"Scan {n}m", callback_data=f"ui:setting:scan_minutes:{n}") for n in (6, 24, 60, 120)],
+                    [Button(f"BGM {int(n * 100)}%", callback_data=f"ui:musicgain:{n}") for n in (.1, .15, .2)],
                     [Button(f"{a}–{b}s", callback_data=f"ui:length:{a}:{b}") for a, b in ((15, 30), (30, 60), (60, 90))],
                     [Button(f"{n}p", callback_data=f"ui:setting:width:{n}") for n in (720, 1080)],
                     [Button(f"Hook: {style}", callback_data=f"ui:hookstyle:{style}") for style in ("auto", "curiosity", "contrast", "direct")],
@@ -131,8 +141,10 @@ class Controls:
                 return
             elif action == "hookstyle":
                 p = Preferences.model_validate(p.model_dump() | {"hook_style": parts[2]})
+            elif action == "musicgain":
+                p = Preferences.model_validate(p.model_dump() | {"music_gain": float(parts[2])})
             elif action == "setting":
-                if parts[2] not in {"clips", "width"}:
+                if parts[2] not in {"clips", "width", "scan_minutes"}:
                     raise ValueError("Unknown setting")
                 p = Preferences.model_validate(p.model_dump() | {parts[2]: int(parts[3])})
             elif action == "length":
@@ -239,7 +251,23 @@ class Controls:
         if clip.editorial.get("automatic_ready") is False:
             auto = False
             review_note = "Local editorial checks require review: " + ", ".join(clip.editorial.get("flags", []))
-        return self.publications.add(job["owner"], job["chat"], f"{job['id']}:{clip.id}", "f1", p.instagram_account,
-                                     [path], clip.caption or clip.title, clip.hashtags, auto=auto,
-                                     predecessor=predecessor if auto else None, gap=7200 if auto and index else 0,
-                                     review_note=review_note)
+        ig_post = self.publications.add(job["owner"], job["chat"], f"{job['id']}:{clip.id}", "f1", p.instagram_account,
+                                         [path], clip.caption or clip.title, clip.hashtags, auto=auto,
+                                         predecessor=predecessor if auto else None, gap=7200 if auto and index else 0,
+                                         review_note=review_note, platform="instagram")
+        try:
+            yt_auto = p.youtube_auto_publish and self.c.store.prefs(job["owner"]).youtube_auto_publish
+            if clip.editorial.get("automatic_ready") is False:
+                yt_auto = False
+            yt_account = getattr(p, "youtube_account", "main")
+            from .youtube_publishing import get_youtube_config
+            yt_cfg = get_youtube_config()
+            if yt_account and yt_account in yt_cfg.get("accounts", {}):
+                self.publications.add(
+                    job["owner"], job["chat"], f"{job['id']}:{clip.id}:yt:{yt_account}", "f1", yt_account,
+                    [path], clip.caption or clip.title, clip.hashtags, auto=yt_auto,
+                    predecessor=None, gap=0, review_note=review_note, platform="youtube"
+                )
+        except Exception:
+            pass
+        return ig_post

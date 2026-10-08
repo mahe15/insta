@@ -1,0 +1,23 @@
+{
+  "creator": "Kenney",
+  "license": "CC0-1.0",
+  "official_source": "https://kenney.nl/assets/interface-sounds",
+  "revision": "4596a49eaf5a533948d49a47467f606bcdea70ff",
+  "files": {
+    "reaction.wav": {
+      "url": "https://raw.githubusercontent.com/Calinou/kenney-interface-sounds/4596a49eaf5a533948d49a47467f606bcdea70ff/addons/kenney_interface_sounds/bong_001.wav",
+      "sha256": "f5d5f83b13edc5321352c2ba57972d1400151e3f27f1c18fcda07d261358511a",
+      "bytes": 11726
+    },
+    "reveal.wav": {
+      "url": "https://raw.githubusercontent.com/Calinou/kenney-interface-sounds/4596a49eaf5a533948d49a47467f606bcdea70ff/addons/kenney_interface_sounds/confirmation_002.wav",
+      "sha256": "b23339f3fdcd9f54520ca73caa3a9ae93ecfb3675acdaf1468990feb5d55d5fa",
+      "bytes": 49614
+    },
+    "transition.wav": {
+      "url": "https://raw.githubusercontent.com/Calinou/kenney-interface-sounds/4596a49eaf5a533948d49a47467f606bcdea70ff/addons/kenney_interface_sounds/switch_001.wav",
+      "sha256": "56a1dd5278d06b4c47c69d7664482bcb3feeac3027fdd8cb6d0883fda7738eb2",
+      "bytes": 109390
+    }
+  }
+}

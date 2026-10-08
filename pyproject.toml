@@ -12,17 +12,23 @@ dependencies = [
   "openai>=2.0,<3",
   "pydantic>=2.10,<3",
   "python-dotenv>=1.0,<2",
-  "yt-dlp[default]>=2026.3.3",
+  "yt-dlp[default,curl-cffi]>=2026.3.3",
   "opencv-python-headless>=4.10,<5",
   "imageio-ffmpeg>=0.6,<0.7",
   "filelock>=3.16,<4",
   "httpx>=0.27,<1",
   "tzdata>=2025.1",
   "json-repair>=0.30",
+  "uroman>=1.3,<2",
+  "Pillow>=11,<13",
+  "google-api-python-client>=2.100.0",
+  "google-auth-oauthlib>=1.2.0",
+  "google-auth-httplib2>=0.2.0",
 ]
 
 
 [project.optional-dependencies]
+web = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1", "python-multipart>=0.0.20,<1"]
 browser = ["playwright>=1.50,<2"]
 transcribe = ["faster-whisper>=1.1,<2"]
 gpu = [
@@ -40,7 +46,7 @@ cliper = "cliper.cli:main"
 include = ["cliper*"]
 
 [tool.setuptools.package-data]
-cliper = ["*.ps1"]
+cliper = ["*.ps1", "assets/sfx/*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -170,6 +170,117 @@ async def test_feature_modes_and_auto_off_hold_queue(cfg):
     assert c.store.prefs(42).f1_enabled and c.store.prefs(42).f2_enabled
 
 
+async def test_f2_qa_toggle_button_and_skip_qa_delivery(cfg, monkeypatch):
+    cfg.owners = {42}
+    cfg.provider = "chatgpt_browser"
+    c = Controller(cfg)
+    c.store.save_prefs(42, Preferences(f2_enabled=True, f2_skip_image_qa=False))
+
+    # 1. Check initial menu state (QA ON)
+    text, keyboard = c.controls.menu(42)
+    assert "F2 Image QA: ON (Gemini QA)" in text
+    buttons = [btn.text for row in keyboard.inline_keyboard for btn in row]
+    assert "F2 QA ON" in buttons
+
+    # 2. Toggle QA OFF via inline button callback
+    query = SimpleNamespace(data="ui:toggle:f2_skip_image_qa", answer=AsyncMock(), message=SimpleNamespace(reply_text=AsyncMock()))
+    update = SimpleNamespace(effective_user=SimpleNamespace(id=42), effective_chat=SimpleNamespace(id=42, type="private"), callback_query=query)
+    await c.controls.callback(update, SimpleNamespace())
+
+    assert c.store.prefs(42).f2_skip_image_qa is True
+    text, keyboard = c.controls.menu(42)
+    assert "F2 Image QA: OFF" in text
+    buttons = [btn.text for row in keyboard.inline_keyboard for btn in row]
+    assert "F2 QA OFF (Skip)" in buttons
+
+    # 3. Check Generate menu also exposes the QA toggle button
+    gen_msg = SimpleNamespace(reply_text=AsyncMock())
+    gen_query = SimpleNamespace(data="ui:generate", answer=AsyncMock(), message=gen_msg)
+    gen_update = SimpleNamespace(effective_user=SimpleNamespace(id=42), effective_chat=SimpleNamespace(id=42, type="private"), callback_query=gen_query)
+    from cliper.faceless import handle_button
+    await handle_button(c.controls, gen_update, SimpleNamespace(), ["ui", "generate"])
+    gen_buttons = [btn.text for row in gen_msg.reply_text.call_args[1]["reply_markup"].inline_keyboard for btn in row]
+    assert "F2 QA: OFF (Skip QA)" in gen_buttons
+
+    # 4. Test Telegram bot /qa command
+    cmd_msg = SimpleNamespace(text="/qa on", reply_text=AsyncMock())
+    cmd_update = SimpleNamespace(effective_user=SimpleNamespace(id=42), effective_chat=SimpleNamespace(id=42, type="private"), message=cmd_msg)
+    await c.command(cmd_update, SimpleNamespace(args=["on"]))
+    assert c.store.prefs(42).f2_skip_image_qa is False
+
+    cmd_msg = SimpleNamespace(text="/qa off", reply_text=AsyncMock())
+    cmd_update = SimpleNamespace(effective_user=SimpleNamespace(id=42), effective_chat=SimpleNamespace(id=42, type="private"), message=cmd_msg)
+    await c.command(cmd_update, SimpleNamespace(args=["off"]))
+    assert c.store.prefs(42).f2_skip_image_qa is True
+
+    # 5. Run carousel generation with QA OFF and verify review is skipped and images are delivered
+    reference = cfg.data_dir / "character.png"
+    frame = np.zeros((400, 320, 3), np.uint8)
+    frame[:, :, 0] = 120
+    cv2.imwrite(str(reference), frame)
+    config = cfg.data_dir / "niches.json"
+    config.write_text(json.dumps({"dark": {"character_path": str(reference), "instagram_account": "dark", "threshold": 90}}))
+    monkeypatch.setenv("NICHES_CONFIG_FILE", str(config))
+
+    c.app = SimpleNamespace(bot=SimpleNamespace(send_message=AsyncMock(), send_media_group=AsyncMock()))
+    worker = FacelessWorker(c.controls)
+    prefs = c.store.prefs(42)
+    identity = worker.store.create(42, 42, "dark", 1, cfg.snapshot_ai(prefs))
+
+    plan = CarouselPlan(topic="Discipline", pillar="Mindset", hook="Do hard things",
+                        caption="Action creates clarity.", hashtags=["discipline"],
+                        slides=[Slide(text=f"Slide {n}", environment="Room", action="Character writes",
+                      lighting="Moody", camera="Close up", mood="Serious",
+                      image_prompt="A cinematic portrait of the original character reading") for n in range(4)])
+
+    reviewed_slides = []
+    class AI:
+        def __init__(self, *args): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def structured(self, instructions, prompt, result_type, max_tokens):
+            if result_type is Ideas:
+                return Ideas(ideas=[Idea(topic=f"Discipline {i}", pillar="Mindset", hook=f"Do hard things {i}",
+                                         angle="Practice one small useful action each day", score=score()) for i in range(3)])
+            if result_type is CarouselPlan:
+                return plan
+            return ContentReview(approved=True, score=score(95), issues=[])
+
+    class MockGemini(AI):
+        async def generate(self, ref, prompt, output):
+            artwork = frame.copy()
+            cv2.putText(artwork, "Slide", (20, 100), cv2.FONT_HERSHEY_SIMPLEX, .5, (255, 255, 255), 1)
+            cv2.imwrite(str(output), artwork)
+        async def review(self, ref, output, text):
+            reviewed_slides.append(text)
+            return ImageReview(text_matches=True, character_matches=True, composition_ok=True, issues=[], observed_text=text)
+
+    monkeypatch.setattr("cliper.faceless.ScopedEditorialClient", AI)
+    monkeypatch.setattr("cliper.faceless.GeminiImages", MockGemini)
+    monkeypatch.setattr("cliper.faceless.research", AsyncMock(return_value={"mode": "fixture", "headlines": []}))
+
+    await worker.process(worker.store.get(identity))
+
+    # QA review must NOT be called at all
+    assert len(reviewed_slides) == 0
+
+    # Job is ready
+    assert worker.store.get(identity)["state"] == "ready"
+
+    # Images were approved and sent to user via send_media_group
+    c.app.bot.send_media_group.assert_awaited_once()
+    media_call = c.app.bot.send_media_group.call_args
+    assert media_call[0][0] == 42
+    assert len(media_call[1]["media"]) == 4
+
+    # send_message sent with publication action buttons
+    c.app.bot.send_message.assert_awaited()
+
+    # Publication is added
+    posts = c.controls.publications.recent(42)
+    assert len(posts) == 1 and posts[0]["state"] == "approval"
+
+
 async def test_gemini_browser_reference_upload_download_and_review(cfg):
     import base64
     from pathlib import Path

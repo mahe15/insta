@@ -31,8 +31,9 @@ def caption_text(caption: str, hashtags: list[str]) -> str:
 
 
 class PublishStore:
-    def __init__(self, store: Store):
+    def __init__(self, store: Store, *, web_only=False):
         self.store = store
+        self.web_only = web_only
         with store.connect() as db:
             db.executescript('''
                 CREATE TABLE IF NOT EXISTS publications (
@@ -41,22 +42,26 @@ class PublishStore:
                     state TEXT NOT NULL, due REAL NOT NULL, predecessor TEXT, gap REAL NOT NULL DEFAULT 0,
                     payload TEXT NOT NULL, container TEXT, target_id TEXT, media_id TEXT,
                     error TEXT NOT NULL DEFAULT '', published_at REAL, created REAL NOT NULL,
+                    platform TEXT NOT NULL DEFAULT 'instagram',
                     UNIQUE(owner,origin));
                 CREATE INDEX IF NOT EXISTS publish_due ON publications(state,due);
             ''')
+            if "platform" not in {r[1] for r in db.execute("PRAGMA table_info(publications)")}:
+                db.execute("ALTER TABLE publications ADD COLUMN platform TEXT NOT NULL DEFAULT 'instagram'")
 
     def add(self, owner, chat, origin, feature, account, paths, caption, hashtags, *, auto=False,
-            predecessor=None, gap=0, due=None, niche=None, review_note=""):
+            predecessor=None, gap=0, due=None, niche=None, review_note="", platform="instagram"):
         identity = uuid.uuid4().hex[:12]
         payload = json.dumps({"paths": [str(Path(p).resolve()) for p in paths],
                               "caption": caption_text(caption, hashtags), "automatic": auto, "niche": niche,
                               "review_note": review_note,
+                              "platform": platform,
                               "asset_hashes": [asset_hash(p) if Path(p).is_file() else None for p in paths]})
         with self.store.connect() as db:
             db.execute("INSERT OR IGNORE INTO publications (id,owner,chat,origin,feature,account,state,due,"
-                       "predecessor,gap,payload,created) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                       "predecessor,gap,payload,created,platform) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                        (identity, owner, chat, origin, feature, account, "queued" if auto else "approval",
-                        due if due is not None else time.time(), predecessor, gap, payload, time.time()))
+                        due if due is not None else time.time(), predecessor, gap, payload, time.time(), platform))
             row = db.execute("SELECT id FROM publications WHERE owner=? AND origin=?", (owner, origin)).fetchone()
         return self.get(row[0], owner)
 
@@ -72,7 +77,7 @@ class PublishStore:
             return [dict(r) for r in db.execute("SELECT * FROM publications WHERE owner=? ORDER BY created DESC LIMIT 20", (owner,))]
 
     def update(self, identity, **values):
-        if not values.keys() <= {"state", "container", "target_id", "media_id", "error", "published_at", "payload"}:
+        if not values.keys() <= {"state", "container", "target_id", "media_id", "error", "published_at", "payload", "platform"}:
             raise ValueError("Invalid publication update")
         with self.store.connect() as db:
             db.execute(f"UPDATE publications SET {','.join(k + '=?' for k in values)} WHERE id=?",
@@ -82,13 +87,14 @@ class PublishStore:
         post = self.get(identity, owner)
         payload = json.loads(post["payload"])
         payload["automatic"] = False
+        target_name = "YouTube Studio" if post.get("platform") == "youtube" else "Instagram"
         with self.store.connect() as db:
             result = db.execute("UPDATE publications SET state=?,due=?,predecessor=CASE WHEN ? THEN NULL ELSE predecessor END,"
                                 "gap=CASE WHEN ? THEN 0 ELSE gap END,error='',payload=? "
                                 "WHERE id=? AND owner=? AND state IN ('approval','failed','queued')",
                                 ("queued" if approved else "rejected", time.time(), approved, approved, json.dumps(payload), identity, owner))
             if not result.rowcount:
-                raise ValueError("Already publishing/published, or outcome uncertain; inspect Instagram before retrying")
+                raise ValueError(f"Already publishing/published, or outcome uncertain; inspect {target_name} before retrying")
 
     def hold_auto(self, owner, feature):
         with self.store.connect() as db:
@@ -96,11 +102,14 @@ class PublishStore:
                        "AND json_extract(payload,'$.automatic')=1",
                        (owner, feature))
 
-    def claim(self):
+    def claim(self, platform="instagram"):
         with self.store.connect() as db:
             db.execute("BEGIN IMMEDIATE")
-            rows = db.execute("SELECT * FROM publications WHERE state='queued' AND due<=? ORDER BY due,created",
-                              (time.time(),)).fetchall()
+            scope = " AND chat=0" if self.web_only else ""
+            plat_scope = " AND platform=?" if platform else ""
+            params = (time.time(), platform) if platform else (time.time(),)
+            rows = db.execute(f"SELECT * FROM publications WHERE state='queued' AND due<=?{plat_scope}{scope} ORDER BY due,created",
+                              params).fetchall()
             for row in rows:
                 if row["predecessor"]:
                     identity, visited, ready = row["predecessor"], {row["id"]}, False
@@ -123,11 +132,15 @@ class PublishStore:
                 return dict(row) | {"state": "preparing"}
         return None
 
-    def recover(self):
+    def recover(self, platform="instagram"):
         with self.store.connect() as db:
-            db.execute("UPDATE publications SET state='queued' WHERE state='preparing'")
-            db.execute("UPDATE publications SET state='uncertain',error='Interrupted during publish; inspect Instagram' "
-                       "WHERE state='publishing'")
+            scope = " AND chat=0" if self.web_only else ""
+            if platform:
+                scope += f" AND platform='{platform}'"
+            db.execute("UPDATE publications SET state='queued' WHERE state='preparing'" + scope)
+            target_name = "YouTube Studio" if platform == "youtube" else "Instagram"
+            db.execute(f"UPDATE publications SET state='uncertain',error='Interrupted during publish; inspect {target_name}' "
+                       f"WHERE state='publishing'" + scope)
 
 
 def account_config(key: str, owner: int):
@@ -269,9 +282,9 @@ class InstagramPublisher:
                 await client.aclose()
 
     async def run(self, notify):
-        self.store.recover()
+        self.store.recover(platform="instagram")
         while True:
-            post = self.store.claim()
+            post = self.store.claim(platform="instagram")
             if not post:
                 await asyncio.sleep(2)
                 continue
