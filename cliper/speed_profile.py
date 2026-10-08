@@ -35,10 +35,11 @@ def preset(base: Preferences, **overrides) -> Preferences:
 
 
 def instructions(prefs):
+    from .project_rules import instructions as project_instructions
     from .display_text import language_brief
     from .prompts import get_prompt
     speed_prompt = get_prompt("speed_brief")
-    return language_brief(prefs) + (speed_prompt if prefs.editorial_profile == "ishowspeed" else "")
+    return language_brief(prefs) + (speed_prompt if prefs.editorial_profile == "ishowspeed" else "") + project_instructions(prefs)
 
 
 def score(ratings, prefs):

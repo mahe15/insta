@@ -933,6 +933,9 @@ function ProjectPreferences({
         "captions",
         "reframe",
         "width",
+        "fps",
+        "color_grade",
+        "export_quality",
         "layout",
         "music",
         "music_gain",
@@ -945,6 +948,8 @@ function ProjectPreferences({
         "sound_effects",
         "sfx_gain",
         "reaction_zoom",
+        "description_suffix",
+        "overlay_text",
       ] as const;
       await api(
         `/jobs/${job.id}/preferences`,
@@ -967,6 +972,7 @@ function ProjectPreferences({
       title="The finishing touches."
       description="These settings apply only to this project, before rendering."
     >
+      <ProjectRules value={draft} onChange={rules => setDraft({ ...draft, ...rules })} discovered />
       <div className="form-grid">
         <Field label="Project layout">
           <select
@@ -997,6 +1003,38 @@ function ProjectPreferences({
             <option value="auto">Face aware</option>
             <option value="center">Center crop</option>
             <option value="blur">Preserve frame + blur</option>
+          </select>
+        </Field>
+        <Field label="Project frame rate">
+          <select
+            value={draft.fps}
+            onChange={(e) => setDraft({ ...draft, fps: +e.target.value })}
+          >
+            <option value={60}>60 fps</option>
+            <option value={30}>30 fps</option>
+          </select>
+        </Field>
+        <Field label="Project colour finish">
+          <select
+            value={draft.color_grade}
+            onChange={(e) =>
+              setDraft({ ...draft, color_grade: e.target.value })
+            }
+          >
+            <option value="natural">Natural</option>
+            <option value="vivid">Vivid</option>
+            <option value="off">Off</option>
+          </select>
+        </Field>
+        <Field label="Project export quality">
+          <select
+            value={draft.export_quality}
+            onChange={(e) =>
+              setDraft({ ...draft, export_quality: e.target.value })
+            }
+          >
+            <option value="high">High-quality master</option>
+            <option value="compact">Compact · Telegram budget</option>
           </select>
         </Field>
         <Field label="Project caption style">
@@ -1445,3 +1483,4 @@ function PublishClipModal({
     </Modal>
   );
 }
+import ProjectRules from "./ProjectRules";

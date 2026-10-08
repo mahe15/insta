@@ -7,7 +7,7 @@ from difflib import SequenceMatcher
 
 from .models import Preferences
 
-VERSION = "editorial-2026-09-v2"
+VERSION = "editorial-2026-10-v3-readable-hooks"
 CLIP_BRIEF = """
 Edit for a stranger seeing this for the first time. The first spoken sentence should establish a
 specific tension, useful promise, surprising observation or emotional event within roughly 1–3s.
@@ -16,7 +16,10 @@ shortest arbitrary duration. No universal duration predicts reach. Consider a 15
 30–60s explanation or 45–90s story only when it fits the requested bounds and earns its length.
 An ending must deliver the opening promise. Do not cut off qualifications or use a fabricated loop.
 Distinguish earned suspense from dead air; do not select greetings, sponsor reads or vague teasers.
-Write the display title as a readable 4–10 word hook, preferably <=65 characters, not a news summary.
+Write the display title as a readable 4–8 word hook, preferably <=56 characters, not a news summary.
+It appears just above the video in a compact white headline: one clear idea, at most two short lines.
+Put the subject and the tension first; remove filler introductions. The subtitle is speech, while
+the headline adds context: do not repeat the first spoken sentence word for word.
 Use concrete stakes, an honest contrast or a precise question answered by THIS clip. No ALL CAPS
 paragraphs, unsupported numbers, fake certainty, 'you won't believe', 'watch till the end', or
 manufactured outrage. Keep necessary names and use the source language. Provide three distinct

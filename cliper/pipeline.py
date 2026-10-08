@@ -104,6 +104,8 @@ class Pipeline:
         transcript = Transcript.model_validate_json((directory / "transcript.json").read_text(encoding="utf-8"))
         from .display_text import display_clip
         clip = display_clip(clip, prefs, transcript.language)
+        from .project_rules import apply
+        clip = apply(clip, prefs)
         verified_transcript = None
         if reference.get("kind") == "remote_index" or (reference.get("kind") == "remote_gemini" and prefs.gemini_verify_captions):
             from .gemini_clipping import verify_range
@@ -205,6 +207,8 @@ class Worker:
         async def deliver_and_record(clip_obj, out_path, clip_num, total_count):
             from .display_text import display_clip
             clip_obj = display_clip(clip_obj, prefs, analysis.language)
+            from .project_rules import apply
+            clip_obj = apply(clip_obj, prefs)
             await progress(f"Sending clip {clip_num}/{total_count}")
             await self.deliver(job, clip_obj, out_path)
             delivered.append(clip_obj.id)

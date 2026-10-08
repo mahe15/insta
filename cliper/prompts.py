@@ -31,9 +31,20 @@ Headlines are topic inspiration, not verified evidence for factual claims. Prefe
 Provide arithmetic claims with a numeric expression, result and explanation so Python can verify them.
 Finance is general education about risk, habits and concepts, not security picks or return forecasts.
 Score honestly; reserve 90+ for outstanding hooks, share/save value, originality and brand fit.
-The first slide hooks attention, middle slides develop one idea, and the last slide delivers a clear CTA.
+
+CRITICAL FORMAT: Each slide is a SPLIT-SCENE image with TWO VERTICALLY-STACKED contrasting scenes:
+- TOP HALF: Shows the problem, sacrifice, starting state, or daily action. Darker/cooler mood.
+- BOTTOM HALF: Shows the reward, result, transformation, or payoff. Warmer/brighter mood.
+Both halves feature the same character in different environments. Each half has its own short bold text (2–5 words).
+Example slide pairs: "Quit Porn" / "Energy Back", "Build Body" / "Confidence Back", "Regret at 44" / "Starts at 20".
+
+For each slide, provide: text (overall slide text combining both halves), plus top_scene and bottom_scene
+with separate text, environment, action, lighting, and mood for each half.
+
+The first slide hooks attention with the strongest contrast, middle slides develop the idea with
+varied contrasts, and the last slide delivers a clear CTA with the most satisfying reward visual.
 Captions must be natural and contain no hashtags; put no more than five in the hashtags array.
-Gemini will render all artwork AND exact slide text. Keep each slide's text brief, readable and well-spaced.
+Gemini will render all artwork AND exact slide text. Keep each half's text ultra-brief and well-spaced.
 """
 
 DEFAULT_CAROUSEL_CRITIQUE = (
@@ -43,36 +54,57 @@ DEFAULT_CAROUSEL_CRITIQUE = (
 
 DEFAULT_CAROUSEL_SLIDE_PROMPT = """Generate ONE finished original Instagram carousel image, exactly 1080x1350 portrait 4:5.
 
-=== RULE 7: CHARACTER IDENTITY & CONSISTENCY ===
+=== RULE 1: SPLIT-SCENE DUAL-PANEL LAYOUT (CRITICAL) ===
+This image MUST be divided into TWO VERTICALLY-STACKED SCENES within one 1080x1350 canvas:
+- TOP HALF (~1080×675px): Shows the PROBLEM, SACRIFICE, or STARTING STATE scene.
+- BOTTOM HALF (~1080×675px): Shows the REWARD, RESULT, or TRANSFORMED STATE scene.
+The two halves should have a natural, clean visual break between them.
+Both halves must feature the SAME CHARACTER from the reference image in DIFFERENT ENVIRONMENTS and ACTIONS.
+
+=== RULE 2: CHARACTER IDENTITY & CONSISTENCY ===
 The attached image is the CHARACTER REFERENCE for our single original protagonist.
-Preserve exact same face, hairstyle, muscular athletic body proportions and identity across every slide.
-The protagonist is an anime-inspired, muscular/athletic male character wearing sleek dark clothing with subtle red accents,
-with a serious, disciplined, focused expression. Do not change his facial features, build or identity.
+Preserve exact same face, hairstyle, body proportions and identity in BOTH halves of this image and across all slides.
+The protagonist appears in the top scene AND the bottom scene — same person, different situation.
+Do not change his facial features, build or identity between the two halves.
 
-=== RULE 6 & 9: VISUAL ARC & CINEMATIC ANIME STYLE ===
+=== RULE 3: TEXT ON EACH HALF ===
+Each half has its OWN short bold text line (2–5 words) rendered directly over the scene.
+The top-half text and bottom-half text form a CONTRASTING PAIR:
+- Top text describes the sacrifice/problem/action (e.g., "Quit Porn", "Build Body", "I only got 10 views")
+- Bottom text describes the reward/result/outcome (e.g., "Energy Back", "Confidence Back", "10 Views:")
+
+=== RULE 4: TYPOGRAPHY & COLOUR ===
+- FONT: Bold, heavy modern sans-serif (thick block weight similar to Montserrat ExtraBold, Anton, or Bebas Neue). Clean, crisp, high mobile readability. NEVER use decorative, cursive, thin, or handwritten fonts.
+- FONT SIZE: Large, bold, dominant within each half. Main text approx 8–12% of each half's height. Never small.
+- TEXT COLOUR: Strict two-tone: Main words in solid crisp WHITE; important keywords/numbers in vibrant bold RED or ORANGE. High contrast against background.
+- TEXT PLACEMENT: Centre-bottom area of each half, over the scene but not covering the character's face.
+
+=== RULE 5: VISUAL CONTRAST BETWEEN HALVES ===
 Visual progression (Slide {index}/{total}): {arc_note}
-Premium cinematic anime illustration, sharp anatomy, realistic perspective, detailed environment,
-dramatic cinematic lighting with strong chiseled shadows and rim highlights. Frame must look like a high-budget cinematic anime movie frame,
-NOT a generic AI poster. Strictly NO watermarks, logos, decorative borders, icons, badge graphics, or UI elements.
+- TOP HALF: Darker, cooler, moodier atmosphere. Character in a challenging, uncomfortable, or starting situation.
+- BOTTOM HALF: Warmer, brighter, more energetic atmosphere. Character in a rewarding, confident, or successful situation.
+The contrast between the two halves should tell the story VISUALLY without needing to read text.
 
-=== RULE 8: COMPOSITION & FRAMING ===
-Exact 1080x1350 portrait (4:5 format). The character occupies a major portion of the frame (cinematic medium/close shot).
-Keep the character's face, eyes, and key action completely unobstructed.
-Place text in a quiet high-contrast negative space zone with minimum 100px side/top margins and 150px bottom margin.
+=== RULE 6: COMPOSITION & FRAMING ===
+Exact 1080x1350 portrait (4:5 format) total canvas, split into two ~1080×675 halves.
+Character occupies a major portion of each half (cinematic medium shot in each scene).
+Keep the character's face and key action unobstructed in both halves.
 {swipe_note}
 
-=== RULE 1, 2, 3, 4 & 10: TYPOGRAPHY, COLOUR & SIMPLICITY ===
-- FONT: Bold, heavy modern sans-serif (thick block weight similar to Montserrat ExtraBold, Anton, or Bebas Neue). Clean, crisp, high mobile readability. NEVER use decorative, cursive, thin, or handwritten fonts.
-- FONT SIZE: Large, bold, and dominant. Main headline/numbers approx 8–12% of image height (108–162px); secondary text approx 6–9% of image height (80–120px). Never make text small.
-- TEXT COLOUR: Strict two-tone palette ONLY: Main words in solid crisp WHITE; important numbers, multipliers, and critical keywords in vibrant bold RED. High contrast against background.
-- TEXT LENGTH: Ultra-concise (target 3–8 words total, prefer 1 line, maximum 2 short lines). NEVER put paragraphs or text blocks on the image.
-- THE GOLDEN RULE: ONE IDEA PER SLIDE. Instant 1–2 second comprehension. Prioritize: HOOK → NUMBER → VISUAL → EMOTION. NEVER: LONG TEXT → SMALL FONT → CLUTTERED IMAGE.
+=== RULE 7: OVERALL STYLE ===
+Premium cinematic anime illustration, sharp anatomy, realistic perspective, detailed environments in BOTH halves.
+Dramatic cinematic lighting with strong shadows and rim highlights. Each half is a complete cinematic scene.
+Frame must look like a high-budget cinematic anime movie frame, NOT a generic AI poster.
+Strictly NO watermarks, logos, decorative borders, icons, badge graphics, or UI elements.
 
 Slide {index}/{total}. Full narrative context: {context_json}
 
-Render ONLY the following exact text on THIS image, once, with correct spelling:
-{slide_text_json}
-(Apply colour rule: render key numbers and crucial impact words in bold RED, and surrounding text in crisp WHITE. Do not print prompt instructions, metadata, or labels on the artwork.)
+=== SPLIT-SCENE DETAILS ===
+{split_scene_json}
+
+Render ONLY the following text on THIS image, with correct spelling:
+OVERALL SLIDE TEXT: {slide_text_json}
+(Apply colour rule: render key numbers and crucial impact words in bold RED or ORANGE, and surrounding text in crisp WHITE. Do not print prompt instructions, metadata, or labels on the artwork.)
 BRAND: {brand_json}
 SERIES DIRECTION: {niche_json}
 SCENE: {scene_json}
@@ -132,7 +164,7 @@ PROMPT_DEFINITIONS: dict[str, dict[str, Any]] = {
         "category": "carousels",
         "description": "Template used to generate the prompt sent to Gemini/Imagen for each individual slide image, combining character reference rules, visual arc, text styling, and scene details.",
         "default": DEFAULT_CAROUSEL_SLIDE_PROMPT.strip(),
-        "variables": ["{index}", "{total}", "{arc_note}", "{swipe_note}", "{slide_text_json}", "{brand_json}", "{niche_json}", "{scene_json}", "{user_prompt_section}", "{feedback_section}"],
+        "variables": ["{index}", "{total}", "{arc_note}", "{swipe_note}", "{slide_text_json}", "{brand_json}", "{niche_json}", "{scene_json}", "{split_scene_json}", "{user_prompt_section}", "{feedback_section}"],
     },
     "carousel_critique": {
         "title": "Carousel Quality Critique & Verification Prompt",

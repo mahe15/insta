@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/project.tsx","./src/settings.tsx","./src/speed.tsx","./src/studio.tsx","./src/workspaces.tsx","./src/xstudio.tsx","./src/api.ts","./src/main.tsx","./src/types.ts","./src/ui.tsx"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/project.tsx","./src/projectrules.tsx","./src/settings.tsx","./src/speed.tsx","./src/studio.tsx","./src/workspaces.tsx","./src/xstudio.tsx","./src/api.ts","./src/main.tsx","./src/types.ts","./src/ui.tsx"],"version":"5.9.3"}

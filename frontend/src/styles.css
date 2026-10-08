@@ -6790,3 +6790,11 @@ h4,
   max-height: 240px;
   overflow-y: auto;
 }
+.project-rules {
+  margin: 24px 0;
+  padding-top: 20px;
+  border-top: 1px solid var(--border, #303238);
+}
+.project-rules h3 { margin: 0 0 6px; font-size: 15px; }
+.project-rules > p { margin: 0 0 16px; font-size: 12px; opacity: .65; }
+.project-rules textarea[readonly] { opacity: .7; }

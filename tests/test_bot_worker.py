@@ -27,7 +27,10 @@ def test_private_owner_access(cfg):
 def test_bot_application_registers_handlers(cfg):
     cfg.token = "123456789:abcdefghijklmnopqrstuvwxyzABCDEFGHI"
     app = Controller(cfg).build()
-    assert len(app.handlers[0]) == 6
+    from telegram.ext import CommandHandler
+    commands = {command for handler in app.handlers[0] if isinstance(handler, CommandHandler)
+                for command in handler.commands}
+    assert {"whoami", "clip", "speedclip", "geminiclip", "xpost", "xjobs", "start", "help"} <= commands
 
 
 def test_clip_selection_tampering_and_double_click(cfg, clip):

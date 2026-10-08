@@ -238,6 +238,8 @@ class Controls:
 
     def clip_publication(self, job, clip, path):
         p = Preferences.model_validate_json(job["prefs"])
+        from .project_rules import apply
+        clip = apply(clip, p)
         selected = sorted(json.loads(job["selected"]))
         index = selected.index(clip.id) if clip.id in selected else 0
         predecessor = None

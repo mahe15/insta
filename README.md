@@ -1,5 +1,7 @@
 # CLIPER
 
+**Editing upgrade:** hooks follow the visible video frame, subtitles use measured text fitting and normalized timing, and new exports default to 1080p/60 fps with a high-quality NVENC master. Large Telegram deliveries get a separate compact copy. [Editing guide and verification](EDITING_PIPELINE.md).
+
 **X Studio:** current-news research through your existing ChatGPT browser, English posts with real media, football plus five category desks, keyword requests, review and recurring schedules. Open **X Studio** in the sidebar. [Setup, research and browser-publishing limitations](X_STUDIO.md).
 
 **IShowSpeed Studio:** open **Speed Studio** in the web sidebar or send `/speedclip YOUTUBE_URL` for dedicated 6–60 second English clips with event-aware selection, restrained CC0 sound effects and reaction emphasis. Normal clipping now defaults to English-script captions and hooks (Hindi → Hinglish). [Feature guide and research](SPEED_STUDIO.md).

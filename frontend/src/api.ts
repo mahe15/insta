@@ -31,9 +31,10 @@ export async function api<T = Record<string, unknown>>(
   }
   return response.json();
 }
-export function upload(path: string, file: File) {
+export function upload(path: string, file: File, preferences?: unknown) {
   const form = new FormData();
   form.append("file", file);
+  if (preferences) form.append("preferences", JSON.stringify(preferences));
   return api(path, "POST", form);
 }
 export const providerName = (id: string | null) =>

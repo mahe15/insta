@@ -182,7 +182,7 @@ async def test_full_decode_not_just_first_seconds_and_black_content(cfg, clip, m
         return await run(args, **kwargs)
     monkeypatch.setattr("cliper.media.run", record)
     with pytest.raises(ValueError, match="effectively black"):
-        await quality_check(path, clip.model_copy(update={"end": 2}), Preferences(width=360), cfg, lambda: False)
+        await quality_check(path, clip.model_copy(update={"end": 2}), Preferences(width=360, fps=30), cfg, lambda: False)
     decode = next(args for args in calls if "-xerror" in args)
     assert "-t" not in decode
 
@@ -256,4 +256,3 @@ def test_slide_prompt_enforces_all_10_design_rules():
     # Rule 10: Golden Rule - Simplicity
     assert "ONE IDEA PER SLIDE" in prompt_slide1
     assert "HOOK → NUMBER → VISUAL → EMOTION" in prompt_slide1
-

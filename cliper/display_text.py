@@ -85,11 +85,17 @@ async def prepare(transcript, clip, prefs, cfg, directory, cancelled=lambda: Fal
     foreign = foreign or any(non_latin(s.text) for s in segments)
     if not foreign or not segments or not prefs.captions:
         return transcript, output_clip, {"mode": mode, "timing": "original word timestamps"}
+    from .captions import chunks
+    timed = transcript.model_copy(update={"segments": [s.model_copy(update={"words": s.words or
+        [Word(start=s.start, end=s.end, text=s.text)]}) for s in segments]})
+    segments = [Segment(start=clip.start + group[0].start, end=clip.start + group[-1].end,
+                        text=" ".join(w.text for w in group), words=[])
+                for group in chunks(timed, clip, 6)]
     from .providers import editorial_client
     settings = cfg.check_ai(prefs.ai_provider, prefs.ai_model)
     if settings.provider == "heuristic":
         raise ValueError("English translation needs your configured AI provider. Choose Romanized to keep the spoken language without an API.")
-    identity = digest({"version": 1, "segments": [s.model_dump() for s in segments], "provider": settings.provider, "model": settings.model})
+    identity = digest({"version": 2, "segments": [s.model_dump() for s in segments], "provider": settings.provider, "model": settings.model})
     target = directory / f"english-{identity[:20]}.json"
     if target.is_file():
         converted = Transcript.model_validate_json(target.read_text("utf-8"))

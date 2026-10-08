@@ -357,8 +357,12 @@ class BrowserEditorialClient:
             if len(payload) > self.cfg.browser_max_chars:
                 raise BrowserProviderError("Editorial prompt exceeds CHATGPT_BROWSER_MAX_CHARS. Use a shorter source.")
             last_err = None
+            observed_links = []
             for attempt in range(2):
+                self.last_web_links = []
                 raw = await self.exchange(payload)
+                observed_links.extend(self.last_web_links)
+                self.last_web_links = list(dict.fromkeys(observed_links))[:80]
                 try:
                     return parse_result(raw, request_id, result_type)
                 except (ValueError, ValidationError) as exc:

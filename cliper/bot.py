@@ -162,8 +162,13 @@ class Controller:
         post = self.controls.clip_publication(job, clip, output)
         if not job["chat"]:
             return
+        from .media import telegram_copy
+        master = output
+        output = await telegram_copy(output, self.cfg)
         caption = f"🎬 {clip.title}\n\n{clip.score}/100 editorial score · {clip.end - clip.start:.0f}s\n"
         caption += f"{clip.reason}\n\nSource: {clip.start:.1f}–{clip.end:.1f}s · Job {job['id']}"
+        if output != master:
+            caption += "\nCompact delivery copy. Full-quality master is available in web Studio."
         for attempt in range(3):
             try:
                 with output.open("rb") as video:

@@ -3,7 +3,7 @@ import hashlib
 import json
 from pathlib import Path
 
-RENDER_VERSION = "square-studio-v5-speed-latin"
+RENDER_VERSION = "square-studio-v6-frame-layout-60fps"
 CAROUSEL_VERSION = "carousel-studio-v4-payoff"
 
 

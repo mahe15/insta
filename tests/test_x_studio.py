@@ -36,7 +36,7 @@ def evidence():
 
 
 def make_ready(db, owner=7, phrase="The midfield shape changed. Here is why it matters."):
-    db.save_settings(owner, XSettings(handle="fixture", browser_risk_accepted=True))
+    db.save_settings(owner, XSettings(handle="fixture", browser_risk_accepted=True, publishing_enabled=True))
     job = db.create(owner, ResearchInput())
     path = db.folder(job["id"]) / "media.jpg"
     Image.new("RGB", (400, 400), "green").save(path)
@@ -55,6 +55,15 @@ def test_live_evidence_missing_citations_is_review_only():
     result.web_search_used = False
     with pytest.raises(ValueError, match="live web"):
         evidence_flags(result, [], 24)
+
+
+def test_citation_tracking_tags_do_not_hide_real_sources():
+    from cliper.x_content import citation_key
+    result = evidence()
+    assert evidence_flags(result, [s.url + "?utm_source=chatgpt.com" for s in result.sources], 24) == []
+    assert citation_key("https://club.example/news?id=1&utm_source=chatgpt.com") == "https://club.example/news?id=1"
+    assert citation_key("https://club.example/news?id=1") != citation_key("https://club.example/news?id=2")
+    assert evidence_flags(result, ["https://127.0.0.1/private"], 24)
 
 
 @pytest.mark.parametrize("hours", [-25, 2])
@@ -88,7 +97,7 @@ def test_owner_fencing_approval_and_immutable_media(cfg):
 def test_auto_holds_flags_and_disabling_holds_existing(cfg):
     db = XStore(Store(cfg.data_dir))
     job = make_ready(db)
-    settings = XSettings(handle="fixture", auto_publish=True, browser_risk_accepted=True)
+    settings = XSettings(handle="fixture", auto_publish=True, browser_risk_accepted=True, publishing_enabled=True)
     db.save_settings(7, settings)
     flagged = job | {"result": job["result"] | {"flags": ["Unconfirmed source"]}}
     with pytest.raises(ValueError, match="editorial review"):
@@ -97,6 +106,21 @@ def test_auto_holds_flags_and_disabling_holds_existing(cfg):
     settings.auto_publish = False
     db.save_settings(7, settings)
     assert db.get(job["id"], 7)["state"] == "review"
+
+
+def test_publishing_off_holds_manual_posts_but_keeps_research(cfg):
+    db = XStore(Store(cfg.data_dir))
+    assert not db.settings(7).publishing_enabled
+    job = make_ready(db)
+    db.approve(job["id"], 7)
+    settings = db.settings(7)
+    settings.publishing_enabled = False
+    db.save_settings(7, settings)
+    assert db.get(job["id"], 7)["state"] == "review"
+    with pytest.raises(ValueError, match="publishing is off"):
+        db.approve(job["id"], 7)
+    pending = db.create(7, ResearchInput(keywords="new football news"))
+    assert db.claim()["id"] == pending["id"]
 
 
 def test_rate_limit_freshness_and_uncertain_recovery(cfg):

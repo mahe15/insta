@@ -15,7 +15,7 @@ import httpx
 
 from .browser_provider import BrowserBusyError
 from .storage import Store
-from .x_content import ResearchInput, XSettings, check_text, commons_image, research
+from .x_content import ResearchInput, XSettings, check_text, citation_key, commons_image, research
 
 log = logging.getLogger(__name__)
 
@@ -60,14 +60,14 @@ class XStore:
         return XSettings.model_validate_json(row[0]) if row else XSettings()
 
     def save_settings(self, owner, settings):
-        if settings.auto_publish and (not settings.handle or not settings.browser_risk_accepted):
-            raise ValueError("Set your X username and acknowledge website automation before enabling automatic publishing")
+        if settings.auto_publish and (not settings.publishing_enabled or not settings.handle or not settings.browser_risk_accepted):
+            raise ValueError("Enable X publishing, set your username and acknowledge website automation before enabling automatic publishing")
         with self.store.connect() as db:
             db.execute("INSERT OR REPLACE INTO x_settings VALUES (?,?)", (owner, settings.model_dump_json()))
             # Disabling auto holds existing automatic posts; account edits invalidate all queued approvals.
             for row in db.execute("SELECT id,result,target FROM x_jobs WHERE owner=? AND state='queued_publish'", (owner,)).fetchall():
                 data = json.loads(row["result"])
-                if row["target"].lower() != settings.handle.lower() or (data.get("automatic") and not settings.auto_publish):
+                if not settings.publishing_enabled or row["target"].lower() != settings.handle.lower() or (data.get("automatic") and not settings.auto_publish):
                     db.execute("UPDATE x_jobs SET state='review',error='Publishing settings changed; review again' WHERE id=?", (row["id"],))
 
     @staticmethod
@@ -126,6 +126,8 @@ class XStore:
     def ready(self, job, *, automatic=False):
         settings = self.settings(job["owner"])
         result = job["result"]
+        if not settings.publishing_enabled:
+            raise ValueError("X publishing is off. Enable it in Account & automation when you are ready")
         if not settings.handle or not settings.browser_risk_accepted:
             raise ValueError("Configure the X account and acknowledge browser automation first")
         check_text(result.get("text", ""))
@@ -179,6 +181,8 @@ class XStore:
                 if not settings.enabled:
                     continue
                 if row["state"] == "queued_publish":
+                    if not settings.publishing_enabled:
+                        continue
                     submitted = db.execute("SELECT count(*),max(submitted) FROM x_jobs WHERE owner=? AND submitted>?", (row["owner"], now - 86400)).fetchone()
                     if submitted[0] >= settings.daily_limit or (submitted[1] and now - submitted[1] < settings.gap_minutes * 60):
                         continue
@@ -231,9 +235,9 @@ class XWorker:
             result = await research(self.cfg, ResearchInput.model_validate(job["request"]),
                                     [j["result"].get("research", {}).get("topic", "") for j in previous],
                                     library[0]["metadata"]["alt"] if library else None)
-            prior_sources = {s["url"] for j in previous if j["id"] != identity and j["state"] != "rejected"
+            prior_sources = {citation_key(s["url"]) for j in previous if j["id"] != identity and j["state"] != "rejected"
                              for s in j["result"].get("research", {}).get("sources", []) if s.get("primary")}
-            if any(s["url"] in prior_sources for s in result["research"]["sources"] if s["primary"]):
+            if any(citation_key(s["url"]) in prior_sources for s in result["research"]["sources"] if s["primary"]):
                 raise ValueError("This primary source story was already covered; try a different angle or keyword")
             if library:
                 result["media"] = library[0]["metadata"] | {"library_id": library[0]["id"]}

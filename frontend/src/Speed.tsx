@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowUpRight, Film, Play, Zap } from "lucide-react";
 import { api, seconds } from "./api";
 import type { Job } from "./types";
+import ProjectRules, { emptyRules } from "./ProjectRules";
 import {
   Badge,
   Button,
@@ -19,6 +20,7 @@ export default function Speed() {
   const { boot, refresh, notify } = useStudio(),
     navigate = useNavigate();
   const [url, setUrl] = useState(""),
+    [rules, setRules] = useState({ ...emptyRules }),
     [mode, setMode] = useState("gemini_browser");
   const [min, setMin] = useState(6),
     [max, setMax] = useState(60),
@@ -82,6 +84,7 @@ export default function Speed() {
           reaction_zoom: zoom,
           music,
           auto_render: render,
+          ...rules,
         },
       });
       refresh();
@@ -222,6 +225,7 @@ export default function Speed() {
                 : "Finished clips wait for your publishing approval."}{" "}
               <Link to="/settings?tab=automation">Manage</Link>
             </p>
+            <ProjectRules value={rules} onChange={setRules} />
             {error && <ErrorBox error={error} />}
             <Button variant="primary" icon={Zap} busy={busy}>
               Find Speed moments

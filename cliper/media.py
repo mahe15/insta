@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 
 from .captions import write_captions
 from .config import Config
+from .edit_layout import layout
 from .models import Clip, Preferences, Transcript
 from .process import run
 from .storage import write_json
@@ -34,7 +35,7 @@ def dimensions(source: Path) -> dict:
     cap = cv2.VideoCapture(str(source))
     try:
         fps = cap.get(cv2.CAP_PROP_FPS)
-        info = {"width": int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
+        info = {"fps": fps, "width": int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
                 "height": int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
                 "duration": cap.get(cv2.CAP_PROP_FRAME_COUNT) / fps if fps else 0}
         if min(info.values()) <= 0:
@@ -107,14 +108,14 @@ async def transcribe(source: Path, directory: Path, prefs: Preferences, cfg: Con
     return Transcript.model_validate_json(target.read_text(encoding="utf-8"))
 
 
-def filter_graph(prefs: Preferences, face: dict, subtitle: str, force_blur=False) -> tuple[str, str]:
+def filter_graph(prefs: Preferences, face: dict, subtitle: str, force_blur=False, zoom=None, hdr=False) -> tuple[str, str]:
     w, h = prefs.width, prefs.width * 16 // 9
     mode = prefs.reframe
+    geometry = layout(prefs, face, force_blur)
     if prefs.layout == "square_hook":
         mode = "square_hook"
-        if force_blur or (prefs.preserve_wide_groups and (face.get("square_mode") == "fit"
-                or face.get("height", 0) > face.get("width", 0))):
-            graph = (f"[0:v]scale={w}:{w}:force_original_aspect_ratio=decrease,"
+        if geometry["fit"]:
+            graph = (f"[0:v]scale={w}:{w}:force_original_aspect_ratio=decrease:force_divisible_by=2,"
                      f"pad={w}:{w}:(ow-iw)/2:(oh-ih)/2:color=black,")
         else:
             expression = center_expression(face.get("square_centers", [])) if prefs.smart_crop else "0.5"
@@ -134,8 +135,27 @@ def filter_graph(prefs: Preferences, face: dict, subtitle: str, force_blur=False
         expression = center_expression(face.get("centers", [])) if mode == "auto" else "0.5"
         graph = (f"[0:v]scale={w}:{h}:force_original_aspect_ratio=increase,"
                  f"crop={w}:{h}:x='max(0,min(iw-ow,iw*({expression})-ow/2))':y=(ih-oh)/2[framed];")
-    graph += "[framed]setsar=1,fps=30"
-    if prefs.captions or prefs.layout == "square_hook":
+    # Work on the source before padding/text; grading and reaction zoom never move the hook.
+    filters = ["setpts=PTS-STARTPTS", "scale=w='trunc(iw*sar/2)*2':h=ih", "setsar=1"]
+    if hdr:
+        filters += ["zscale=t=linear:npl=100", "format=gbrpf32le", "zscale=p=bt709",
+                    "tonemap=tonemap=mobius:desat=2", "zscale=t=bt709:m=bt709:r=limited", "format=yuv420p"]
+    if prefs.color_grade != "off":
+        filters.append("eq=contrast=1.025:brightness=0:saturation=1.04:gamma=1.005" if prefs.color_grade == "natural"
+                       else "eq=contrast=1.045:brightness=0:saturation=1.09:gamma=1.01")
+        filters.append("unsharp=3:3:0.18:3:3:0")
+    if zoom and not geometry["fit"]:
+        beat = zoom[0]
+        duration = max(.1, beat['end'] - beat['start'])
+        factor = f"1+0.045*pow(sin(PI*min(1,max(0,(t-{beat['start']:.3f})/{duration:.3f}))),2)"
+        # Animate scale; keep crop dimensions and final canvas fixed.
+        sw, sh = face.get("width", w), face.get("height", w)
+        filters += [f"scale=w='ceil({sw}*({factor})/2)*2':h='ceil({sh}*({factor})/2)*2':eval=frame",
+                    f"crop={sw}:{sh}"]
+    graph = "[0:v]" + ",".join(filters) + "[graded];" + graph.replace("[0:v]", "[graded]")
+    graph = graph.replace(":force_original_aspect_ratio=", ":flags=lanczos:force_original_aspect_ratio=")
+    graph += f"[framed]setsar=1,fps={prefs.fps}"
+    if prefs.captions or prefs.layout == "square_hook" or prefs.overlay_text:
         # Subtitle filename is generated internally, and cwd avoids Windows drive/path escaping.
         graph += f",ass=filename={subtitle}"
     graph += "[out]"
@@ -148,8 +168,10 @@ async def quality_check(path: Path, clip: Clip, prefs: Preferences, cfg: Config,
         raise ValueError("Output did not pass the vertical resolution check")
     if abs(info["duration"] - (clip.end - clip.start)) > .65:
         raise ValueError("Output duration does not match the edit plan")
-    if path.stat().st_size >= 49_000_000:
+    if prefs.export_quality == "compact" and path.stat().st_size >= 49_000_000:
         raise ValueError("Output exceeds the Telegram delivery budget")
+    if abs(info["fps"] - prefs.fps) > .1:
+        raise ValueError("Output frame rate does not match the edit plan")
     # Inspect every frame. A sample cannot justify a 'full_decode' result.
     volume = await run([cfg.ffmpeg(), "-hide_banner", "-xerror", "-nostdin", "-i", str(path),
                         "-af", "volumedetect", "-f", "null", "-"], cancelled=cancelled, timeout=300)
@@ -168,14 +190,15 @@ async def quality_check(path: Path, clip: Clip, prefs: Preferences, cfg: Config,
 
 def video_encoder_args(cfg: Config, bitrate: int, fast: bool = False) -> list[str]:
     if cfg.video_encoder == "h264_nvenc":
-        preset = "p1" if fast else "p5"
+        preset = "p1" if fast else "p6"
         tune = "ll" if fast else "hq"
         return ["-c:v", "h264_nvenc", "-gpu", str(cfg.gpu_device_index), "-preset", preset, "-tune", tune,
-                "-rc", "vbr", "-cq", "21", "-b:v", f"{bitrate}k"]
+                "-rc", "vbr", "-cq", "19", "-b:v", f"{bitrate}k", *([] if fast else
+                ["-rc-lookahead", "16", "-spatial-aq", "1", "-aq-strength", "8", "-bf", "3"])]
     if cfg.video_encoder == "libx264":
         threads = "0" if fast else "4"
-        preset = "ultrafast" if fast else "fast"
-        return ["-c:v", "libx264", "-threads", threads, "-preset", preset, "-crf", "21"]
+        preset = "ultrafast" if fast else "medium"
+        return ["-c:v", "libx264", "-threads", threads, "-preset", preset, "-crf", "19"]
     raise ValueError("Unknown VIDEO_ENCODER; choose h264_nvenc or libx264")
 
 
@@ -186,7 +209,10 @@ async def render(source: Path, directory: Path, transcript: Transcript, clip: Cl
     from .speed_edit import plan
     transcript, clip, text_report = await prepare(transcript, clip, prefs, cfg, directory, cancelled)
     edit_plan = await plan(source, directory, clip, prefs, cfg, cancelled)
-    ass = write_captions(directory, transcript, clip, prefs)
+    source_info = await asyncio.to_thread(dimensions, source)
+    color_info = await run([cfg.ffmpeg(), "-hide_banner", "-nostdin", "-ss", str(clip.start), "-i", str(source),
+                            "-t", "0.01", "-f", "null", "-"], timeout=60, cancelled=cancelled)
+    hdr = any(tag in color_info for tag in ("smpte2084", "arib-std-b67"))
     face_path = directory / f"clip_{clip.id:02}.vision.json"
     if prefs.reframe == "auto" and (prefs.layout == "legacy" or prefs.smart_crop):
         await run([sys.executable, "-m", "cliper.vision", str(source), str(clip.start), str(clip.end),
@@ -194,6 +220,7 @@ async def render(source: Path, directory: Path, transcript: Transcript, clip: Cl
         face = json.loads(face_path.read_text(encoding="utf-8"))
     else:
         face = {}
+    face = source_info | face
     if prefs.editorial_profile == "ishowspeed" and clip.moment_type in {"challenge", "football"}:
         face["square_mode"] = "fit"
     length = clip.end - clip.start
@@ -211,11 +238,15 @@ async def render(source: Path, directory: Path, transcript: Transcript, clip: Cl
         write_json(track_note, {"category": clip.music_category, "path": str(track) if track else None,
                                 "gain": prefs.music_gain, "status": "selected" if track else "category folder is empty"})
     # Limit peak video bitrate with ample mux/audio headroom for Telegram's cloud API.
-    bitrate = min(6500, int((43_000_000 * 8 / length) / 1000) - 160)
+    bitrate = (min(6500, int((43_000_000 * 8 / length) / 1000) - 192) if prefs.export_quality == "compact"
+               else max(1800, round((16000 if prefs.fps == 60 else 10000) * (prefs.width / 1080) ** 2)))
     target = directory / f"clip_{clip.id:02}.mp4"
     partial = directory / f"clip_{clip.id:02}.partial.mp4"
+    fallback_fit = False
     for attempt in range(2):
-        graph, mode = filter_graph(prefs, face, ass.name, force_blur=bool(attempt))
+        geometry = layout(prefs, face, fallback_fit)
+        ass = write_captions(directory, transcript, clip, prefs, geometry)
+        graph, mode = filter_graph(prefs, face, ass.name, force_blur=fallback_fit, zoom=edit_plan["zoom"], hdr=hdr)
         audio_map = ["-map", "0:a:0", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11"]
         audio_inputs = []
         if track or edit_plan["effects"]:
@@ -223,11 +254,6 @@ async def render(source: Path, directory: Path, transcript: Transcript, clip: Cl
             audio_filters, audio_inputs = audio_graph(track, edit_plan, length, prefs)
             graph += audio_filters
             audio_map = ["-map", "[aout]"]
-        if edit_plan["zoom"] and face.get("square_mode") != "fit":
-            beat = edit_plan["zoom"][0]
-            w, h = prefs.width, prefs.width * 16 // 9
-            factor = f"1+0.06*between(t,{beat['start']:.3f},{beat['end']:.3f})"
-            graph = graph.replace("[framed]setsar=1", f"[framed]scale=w='ceil({w}*({factor})/2)*2':h='ceil({h}*({factor})/2)*2':eval=frame,crop={w}:{h},setsar=1")
         filter_threads = str(min(8, max(2, os.cpu_count() or 4)))
         await run([cfg.ffmpeg(), "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
                    "-ss", f"{clip.start:.3f}", "-i", str(source),
@@ -236,15 +262,20 @@ async def render(source: Path, directory: Path, transcript: Transcript, clip: Cl
                    "-map", "[out]", *audio_map,
                    *video_encoder_args(cfg, bitrate),
                    "-maxrate", f"{bitrate}k", "-bufsize", f"{bitrate * 2}k",
-                   "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
+                   "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
                    "-movflags", "+faststart", "-map_metadata", "-1", str(partial)],
                   cwd=directory, cancelled=cancelled, timeout=3600)
         try:
             qa = await quality_check(partial, clip, prefs, cfg, cancelled)
-        except ValueError:
+        except ValueError as exc:
             if attempt:
                 raise
-            bitrate = int(bitrate * .8)
+            if "delivery budget" in str(exc):
+                bitrate = int(bitrate * .8)
+            elif "effectively black" in str(exc):
+                fallback_fit = True
+            else:
+                raise
             continue
         partial.replace(target)
         from .quality import save_cover
@@ -252,6 +283,9 @@ async def render(source: Path, directory: Path, transcript: Transcript, clip: Cl
         write_json(directory / f"clip_{clip.id:02}.json", {
             "clip": clip.model_dump(), "preferences": prefs.model_dump(), "render": {"layout": mode, "captions": prefs.captions,
                                                  "style": prefs.style, "encoder": cfg.video_encoder,
+                                                 "geometry": geometry, "fps": prefs.fps, "source_fps": source_info["fps"],
+                                                 "color_grade": prefs.color_grade, "hdr_tonemapped": hdr,
+                                                 "export_quality": prefs.export_quality,
                                                  "preserve_wide_groups": prefs.preserve_wide_groups}, "quality": qa,
             "music": {"category": clip.music_category, "file": str(track) if track else None, "gain": prefs.music_gain,
                       "normalized": bool(track and prefs.music_normalize),
@@ -259,3 +293,30 @@ async def render(source: Path, directory: Path, transcript: Transcript, clip: Cl
             "speed_edit": edit_plan, "display_text": text_report, "vision": face, "review_note": "Automated technical QA; editorial and face visibility review advised."})
         return target
     raise ValueError("Could not produce a valid export")
+
+
+async def telegram_copy(source: Path, cfg: Config, cancelled=lambda: False) -> Path:
+    """Preserve the master; compress only delivery when Telegram's cloud limit requires it."""
+    if source.stat().st_size < 49_000_000:
+        return source
+    info = await asyncio.to_thread(dimensions, source)
+    folder = source.parent / "delivery"
+    folder.mkdir(exist_ok=True)
+    target = folder / source.name
+    partial = target.with_suffix(".partial.mp4")
+    if target.is_file() and target.stat().st_mtime_ns >= source.stat().st_mtime_ns and target.stat().st_size < 49_000_000:
+        return target
+    bitrate = min(6500, int(42_000_000 * 8 / info["duration"] / 1000) - 192)
+    for _attempt in range(2):
+        await run([cfg.ffmpeg(), "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", str(source),
+                   "-map", "0:v:0", "-map", "0:a:0", *video_encoder_args(cfg, bitrate),
+                   "-maxrate", f"{bitrate}k", "-bufsize", f"{bitrate * 2}k", "-pix_fmt", "yuv420p",
+                   "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(partial)], cancelled=cancelled, timeout=3600)
+        await run([cfg.ffmpeg(), "-hide_banner", "-loglevel", "error", "-xerror", "-i", str(partial),
+                   "-f", "null", "-"], cancelled=cancelled, timeout=300)
+        if partial.stat().st_size < 49_000_000:
+            partial.replace(target)
+            return target
+        bitrate = int(bitrate * .8)
+    partial.unlink(missing_ok=True)
+    raise ValueError("Telegram copy exceeds its upload limit; download the full-quality master in Studio")

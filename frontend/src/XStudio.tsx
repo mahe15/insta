@@ -23,6 +23,7 @@ import {
 type Settings = {
   handle: string;
   enabled: boolean;
+  publishing_enabled: boolean;
   auto_publish: boolean;
   browser_risk_accepted: boolean;
   daily_limit: number;
@@ -158,9 +159,11 @@ export default function XStudio() {
             : "Account not connected"}
         </span>
         <span className="muted">
-          {data.settings.auto_publish
-            ? "Automatic publishing"
-            : "Review before publishing"}
+          {!data.settings.publishing_enabled
+            ? "Publishing off"
+            : data.settings.auto_publish
+              ? "Automatic publishing"
+              : "Review before publishing"}
         </span>
         <Button icon={Settings2} onClick={() => setSettingsOpen(true)}>
           Account & automation
@@ -398,6 +401,11 @@ export default function XStudio() {
         <Review
           key={`${current.id}:${current.state}`}
           job={current}
+          publishingEnabled={Boolean(
+            data.settings.publishing_enabled &&
+            data.settings.handle &&
+            data.settings.browser_risk_accepted,
+          )}
           close={() => setSelected(null)}
           action={action}
           busy={busy}
@@ -503,11 +511,13 @@ function MediaUpload({
 
 function Review({
   job,
+  publishingEnabled,
   close,
   action,
   busy,
 }: {
   job: Job;
+  publishingEnabled: boolean;
   close: () => void;
   action: Action;
   busy: boolean;
@@ -624,7 +634,9 @@ function Review({
                 <Button
                   variant="primary"
                   busy={busy}
-                  disabled={!reviewed || !job.result.media}
+                  disabled={
+                    !publishingEnabled || !reviewed || !job.result.media
+                  }
                   onClick={() =>
                     action(async () => {
                       await api(`/x/jobs/${job.id}`, "PUT", { text, reviewed });
@@ -635,7 +647,7 @@ function Review({
                     }, "Approved post queued for X.")
                   }
                 >
-                  Approve & queue
+                  {publishingEnabled ? "Approve & queue" : "Publishing off"}
                 </Button>
               </div>
             </>
@@ -801,6 +813,17 @@ function Account({
           checked={value.enabled}
           onChange={(enabled) => update({ enabled })}
           description="Pause X research and queued posts independently of clipping."
+        />
+        <Switch
+          label="Enable X publishing"
+          checked={value.publishing_enabled ?? false}
+          onChange={(publishing_enabled) =>
+            update({
+              publishing_enabled,
+              ...(!publishing_enabled ? { auto_publish: false } : {}),
+            })
+          }
+          description="Off keeps research and draft editing available while blocking all X submissions."
         />
         <Switch
           label="Publish automatically"

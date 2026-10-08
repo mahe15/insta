@@ -96,10 +96,16 @@ async def test_studio_browser_real_mutations(cfg, transcript, clip, monkeypatch)
             await page.get_by_role("dialog").get_by_role("alert").wait_for()
             assert len(store.recent(7)) == 1
             await page.get_by_label("Video or saved stream URL").fill("https://youtu.be/another-source")
+            await page.get_by_label("AI editing instructions", exact=False).fill("Prefer complete football reactions")
+            await page.get_by_label("Always include in post description", exact=False).fill("#done")
+            await page.get_by_label("Always show on the video", exact=False).fill("@myclips")
             await page.get_by_role("button", name="Create project", exact=True).click()
             await page.get_by_text("Project added to your production queue.", exact=True).wait_for()
             new_id = page.url.rsplit("/", 1)[-1]
             assert store.get(new_id)["chat"] == 0
+            rules = json.loads(store.get(new_id)["prefs"])
+            assert rules["description_suffix"] == "#done" and rules["overlay_text"] == "@myclips"
+            assert store.prefs(7).description_suffix == ""
             await page.get_by_role("button", name="Cancel project", exact=True).click()
             await page.get_by_role("dialog").get_by_role("button", name="Cancel project", exact=True).click()
             await page.get_by_text("Project cancelled.", exact=True).wait_for()
@@ -120,6 +126,7 @@ async def test_studio_browser_real_mutations(cfg, transcript, clip, monkeypatch)
             await page.get_by_role("heading", name="Find the moment. Keep the reaction.").wait_for()
             await page.get_by_label("YouTube stream or video link").fill("https://youtu.be/abcdefghijk")
             await page.get_by_label("Maximum seconds", exact=True).fill("12")
+            await page.get_by_label("Always include in post description", exact=False).fill("#speed")
             await page.get_by_role("switch", name="Sound accents", exact=True).click()
             await page.get_by_role("button", name="Find Speed moments", exact=True).click()
             await page.get_by_text("Speed project added.", exact=False).wait_for()
@@ -128,6 +135,7 @@ async def test_studio_browser_real_mutations(cfg, transcript, clip, monkeypatch)
             assert speed_prefs["editorial_profile"] == "ishowspeed"
             assert speed_prefs["text_mode"] == "english" and speed_prefs["max_seconds"] == 12
             assert speed_prefs["sound_effects"] is False
+            assert speed_prefs["description_suffix"] == "#speed"
             await page.goto(f"http://127.0.0.1:{port}/settings")
             await page.get_by_label("Hook & caption language", exact=False).select_option("source")
             await page.get_by_role("button", name="Save changes", exact=True).first.click()

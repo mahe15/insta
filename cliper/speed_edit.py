@@ -91,5 +91,5 @@ def audio_graph(track, plan, length, prefs):
         graph += "[bedmix][side]sidechaincompress=threshold=.025:ratio=6:attack=8:release=180:makeup=1[ducked];[voice][ducked]"
     else:
         graph += "[side]anullsink;[voice][bedmix]"
-    graph += "amix=inputs=2:duration=first:normalize=0,alimiter=limit=.95:level=false[aout]"
+    graph += "amix=inputs=2:duration=first:normalize=0,alimiter=limit=.95:level=false:latency=true[aout]"
     return graph, extras

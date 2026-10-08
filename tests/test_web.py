@@ -79,6 +79,37 @@ def test_new_web_job_is_queued_locally_and_validates_hosts(web):
     assert client.post("/api/jobs", json={"source": "C:/secret.env"}).status_code == 400
 
 
+def test_project_rules_link_speed_upload_and_publish(web, transcript, clip):
+    client, store, _ = web
+    rules = {"project_rules": "Choose complete football reactions", "description_suffix": "Follow along. #done",
+             "overlay_text": "@mypage"}
+    for endpoint in ("/api/jobs", "/api/speed/jobs"):
+        response = client.post(endpoint, json={"source": "https://youtu.be/abcdefghijk", "preferences": rules})
+        assert response.status_code == 201
+        prefs = json.loads(store.get(response.json()["id"])["prefs"])
+        assert all(prefs[k] == v for k, v in rules.items())
+        store.update(response.json()["id"], state="cancelled")
+    response = client.post("/api/jobs/upload", files={"file": ("sample.mp4", b"fixture-video", "video/mp4")},
+                           data={"preferences": json.dumps(rules)})
+    assert response.status_code == 201
+    assert json.loads(store.get(response.json()["id"])["prefs"])["overlay_text"] == "@mypage"
+    store.update(response.json()["id"], state="cancelled")
+    assert store.prefs(7).description_suffix == ""
+    identity = ready_job(store, transcript, clip)
+    result = client.put(f"/api/jobs/{identity}/preferences", json={"description_suffix": rules["description_suffix"], "overlay_text": "#done"})
+    assert result.status_code == 200
+    detail = client.get(f"/api/jobs/{identity}").json()
+    assert detail["analysis"]["clips"][0]["hashtags"][0] == "done"
+    path = store.directory(identity) / "clips" / "clip_01.mp4"
+    path.parent.mkdir(exist_ok=True)
+    path.write_bytes(b"fixture-video")
+    result = client.post(f"/api/jobs/{identity}/clips/1/publish", json={"platform": "instagram", "caption": "Manual caption", "publish_now": False})
+    assert result.status_code == 200
+    post = PublishStore(store).get(result.json()["publication_id"])
+    caption = json.loads(post["payload"])["caption"]
+    assert "Follow along." in caption and "#done" in caption
+
+
 def test_ownership_and_transcript_filtering(web, transcript, clip):
     client, store, _ = web
     identity = ready_job(store, transcript, clip)
@@ -317,4 +348,3 @@ def test_prompts_crud_and_carousel_input_prompt(web):
     our_job = next((j for j in list_car if j["id"] == job_id), None)
     assert our_job is not None
     assert our_job["prompt"] == "10 pages a day compounding habits"
-

@@ -53,6 +53,19 @@ async def test_bounded_repair_and_no_retry_on_transport_failure(cfg, monkeypatch
     assert exchange.await_count == 1
 
 
+async def test_research_repair_preserves_visible_source_links(cfg, monkeypatch):
+    client = BrowserEditorialClient(cfg)
+    attempts = []
+    async def exchange(payload):
+        attempts.append(payload)
+        client.last_web_links = [f"https://source{len(attempts)}.example/story"]
+        request_id = re.search(r"Use request_id ([a-f0-9]+)\.", payload)[1]
+        return "invalid" if len(attempts) == 1 else result_json(request_id)
+    monkeypatch.setattr(client, "exchange", exchange)
+    await client.request("Research", "topic", ContextResult, 100, allow_web_search=True)
+    assert client.last_web_links == ["https://source1.example/story", "https://source2.example/story"]
+
+
 async def test_browser_size_guard_and_cancellation(cfg, monkeypatch):
     client = BrowserEditorialClient(cfg)
     exchange = AsyncMock()

@@ -40,6 +40,7 @@ import {
   useStudio,
 } from "./ui";
 import Speed from "./Speed";
+import ProjectRules, { emptyRules } from "./ProjectRules";
 import XStudio from "./XStudio";
 import Studio from "./Studio";
 import Project from "./Project";
@@ -488,6 +489,7 @@ function NewProject({
   const { boot, notify, refresh } = useStudio(),
     navigate = useNavigate();
   const [url, setUrl] = useState(initialUrl),
+    [rules, setRules] = useState({ ...emptyRules }),
     [tab, setTab] = useState("link"),
     [mode, setMode] = useState(boot.preferences.clipping_mode),
     [scan, setScan] = useState(boot.preferences.scan_minutes),
@@ -499,6 +501,7 @@ function NewProject({
   useEffect(() => {
     if (open) {
       setUrl(initialUrl);
+      setRules({ ...emptyRules });
       setMode(boot.preferences.clipping_mode);
       setScan(boot.preferences.scan_minutes);
       setClips(boot.preferences.clips);
@@ -515,7 +518,7 @@ function NewProject({
       let result: Job;
       if (tab === "upload") {
         if (!file) throw new Error("Choose a video file first.");
-        result = (await upload("/jobs/upload", file)) as unknown as Job;
+        result = (await upload("/jobs/upload", file, rules)) as unknown as Job;
       } else {
         const focusTimes = focus.trim()
           ? focus
@@ -541,6 +544,7 @@ function NewProject({
             scan_minutes: scan,
             clips,
             focus_times: focusTimes,
+            ...rules,
           },
         });
       }
@@ -664,6 +668,7 @@ function NewProject({
             />
           </label>
         )}
+        <ProjectRules value={rules} onChange={setRules} />
         <div className="project-summary">
           <span>
             {providerName(

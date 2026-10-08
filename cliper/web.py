@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import quote, urlencode, urlsplit
 
-from fastapi import FastAPI, HTTPException, Request, UploadFile
+from fastapi import FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -374,11 +374,17 @@ def create_app(cfg: Config | None = None, *, start_engine=True, token=None, proj
             await file.close()
 
     @app.post("/api/jobs/upload", status_code=201)
-    async def upload_video(file: UploadFile):
+    async def upload_video(file: UploadFile, preferences: str = Form("{}")):
         suffix = Path(file.filename or "").suffix.lower()
         if suffix not in {".mp4", ".mov", ".mkv", ".webm", ".m4v"}:
             raise ValueError("Upload MP4, MOV, MKV or WebM video")
-        prefs = store.prefs(owner).model_copy(update={"clipping_mode": "audio_first"})
+        try:
+            overrides = json.loads(preferences)
+        except ValueError:
+            raise ValueError("Upload preferences must be valid JSON")
+        if not isinstance(overrides, dict):
+            raise ValueError("Upload preferences must be an object")
+        prefs = Preferences.model_validate(store.prefs(owner).model_dump() | overrides | {"clipping_mode": "audio_first"})
         if not prefs.f1_enabled:
             raise ValueError("Enable clipping first")
         cfg.check_ai(prefs.ai_provider, prefs.ai_model)
@@ -415,12 +421,15 @@ def create_app(cfg: Config | None = None, *, start_engine=True, token=None, proj
                 pass
 
             for clip in analysis["clips"]:
+                from .project_rules import description
+                clip["caption"], clip["hashtags"] = description(clip.get("caption") or clip["title"],
+                    clip.get("hashtags", []), Preferences.model_validate_json(job["prefs"]))
                 stem = f"clip_{clip['id']:02}"
                 clip["video"] = f"/api/jobs/{identity}/files/{stem}.mp4" if (directory / "clips" / f"{stem}.mp4").is_file() else None
                 clip["cover"] = f"/api/jobs/{identity}/files/{stem}.cover.jpg" if (directory / "clips" / f"{stem}.cover.jpg").is_file() else None
                 clip["qa"] = read_json(directory / "clips" / f"{stem}.json", {}).get("quality")
                 clip["publications"] = pubs_by_clip.get(clip["id"], [])
-        return job_data(job) | {"analysis": analysis, "preferences": json.loads(job["prefs"]), "selected": json.loads(job["selected"])}
+        return job_data(job) | {"analysis": analysis, "preferences": Preferences.model_validate_json(job["prefs"]).model_dump(), "selected": json.loads(job["selected"])}
 
     @app.get("/api/jobs/{identity}/transcript")
     def transcript(identity: str, q: str = "", offset: int = 0):
@@ -443,6 +452,8 @@ def create_app(cfg: Config | None = None, *, start_engine=True, token=None, proj
             source = job["source"]
             previous = Preferences.model_validate_json(job["prefs"])
             prefs = cfg.snapshot_ai(previous if previous.editorial_profile == "ishowspeed" else store.prefs(owner))
+            prefs = prefs.model_copy(update={key: getattr(previous, key) for key in
+                ("project_rules", "description_suffix", "overlay_text")})
             if not source.startswith("https://") and not Path(source).is_file():
                 raise ValueError("The original file is no longer available")
             duplicate = store.create(owner, 0, source, prefs, cfg.max_active_jobs)
@@ -517,6 +528,8 @@ def create_app(cfg: Config | None = None, *, start_engine=True, token=None, proj
         title = (body.title or clip.get("title") or f"Clip {clip_id}").strip()
         caption = (body.caption or clip.get("caption") or title).strip()
         tags = [t.lstrip("#") for t in (body.hashtags or clip.get("hashtags") or []) if t.strip()]
+        from .project_rules import description
+        caption, tags = description(caption, tags, Preferences.model_validate_json(job["prefs"]))
 
         if body.platform == "youtube":
             from .youtube_publishing import get_youtube_config, get_token_path, upload_to_youtube
@@ -530,8 +543,8 @@ def create_app(cfg: Config | None = None, *, start_engine=True, token=None, proj
                 raise ValueError(f"YouTube channel '{acc_info.get('title', account_key)}' is not authorized yet. Authorize it in Settings.")
 
             clean_tags = list(tags)
-            if "shorts" not in [t.lower() for t in clean_tags]:
-                clean_tags.insert(0, "shorts")
+            if len(clean_tags) < 5 and "shorts" not in [t.lower() for t in clean_tags]:
+                clean_tags.append("shorts")
             desc_text = caption
             if clean_tags and not any(f"#{t}" in desc_text for t in clean_tags):
                 desc_text = f"{desc_text}\n\n{' '.join('#' + t for t in clean_tags[:5])}".strip()
@@ -613,6 +626,7 @@ def create_app(cfg: Config | None = None, *, start_engine=True, token=None, proj
     def project_preferences(identity: str, body: dict):
         job = owned(identity)
         allowed_fields = {"style", "captions", "reframe", "width", "layout", "music", "music_gain",
+                          "fps", "color_grade", "export_quality", "description_suffix", "overlay_text",
                           "music_normalize", "music_ducking", "smart_crop", "preserve_wide_groups", "trim_edges",
                           "text_mode", "sound_effects", "sfx_gain", "reaction_zoom"}
         if not body.keys() <= allowed_fields:

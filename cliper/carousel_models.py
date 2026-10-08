@@ -95,6 +95,15 @@ class Ideas(Model):
     ideas: list[Idea] = Field(min_length=1, max_length=10)
 
 
+class SceneHalf(Model):
+    """One half of a vertically-split carousel slide."""
+    text: str = Field(min_length=1, max_length=120)
+    environment: str = Field(min_length=2, max_length=150)
+    action: str = Field(min_length=2, max_length=300)
+    lighting: str = Field(min_length=2, max_length=150)
+    mood: str = Field(min_length=2, max_length=100)
+
+
 class Slide(Model):
     text: str = Field(min_length=1, max_length=250)
     environment: str = Field(min_length=2, max_length=150)
@@ -103,6 +112,9 @@ class Slide(Model):
     camera: str = Field(min_length=2, max_length=250)
     mood: str = Field(min_length=2, max_length=150)
     image_prompt: str = Field(min_length=20, max_length=4000)
+    # Split-scene fields: when present, Gemini renders two stacked scenes per slide
+    top_scene: SceneHalf | None = Field(default=None)
+    bottom_scene: SceneHalf | None = Field(default=None)
 
 
 class CarouselPlan(Model):

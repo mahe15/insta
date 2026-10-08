@@ -1,65 +1,135 @@
-# Country & Americana Background Music Catalog
+# Comprehensive Background Music & Audio Catalog
 
-This directory contains curated, royalty-free Country, Western, Bluegrass, and Americana tracks for video clip production with **CLIPER**.
+This directory contains the curated royalty-free music library for **CLIPER** short-form video clip generation across TikTok, YouTube Shorts, and Instagram Reels.
 
-- **Composer / Artist**: Kevin MacLeod (incompetech.com)
-- **License**: Creative Commons Attribution 4.0 International (CC BY 4.0)
-- **Audio Format**: High-bitrate MP3 (160 - 320 kbps)
+- **Total Tracks**: 64 tracks
+- **Supported Formats**: MP3, WAV, M4A, AAC, FLAC, OGG
+- **Mix Specification**: Smart auto-loop, normalized speech blending with `loudnorm=I=-16:TP=-1.5`, background music ducking, and `0.20` gain (-14 dB).
 
 ---
 
-## Folders & Tracks
+## Folders & Track Breakdown
 
-### 1. `Chill - Ambient` (Relaxed, acoustic, front porch calming)
-| Track | Duration | Instruments | Feel / Style |
+### 1. `Energetic - Hype` (22 Tracks)
+*Fast, aggressive, adrenaline-pumping, workout, gaming, and viral short-form hype.*
+
+#### 🔥 Viral Phonk Collection (Trending / Drift / Brazilian / Sigma)
+| Track | Artist | Subgenre | Feel / Style |
 |---|---|---|---|
-| **Cattails.mp3** | 2:39 | Banjo, Accordion, Guitar, Erhu, Violins | Bouncy, calming, relaxed drifting acoustic lull |
-| **Porch Swing Days - slower.mp3** | 3:36 | Acoustic Guitars, Bass, Kit, Percussion | Warm, feel-good front porch acoustic melody |
-| **Porch Blues.mp3** | 1:55 | Acoustic Guitar, Harmonica, Piano | Relaxed 12-bar front porch acoustic country blues |
-| **Clear Air.mp3** | 3:03 | Steel String Acoustic Guitar, Classical Guitar | Easy-going, bright, relaxed fingerpicking |
+| **Kordhell - Murder In My Mind.mp3** | Kordhell | Drift Phonk | Global #1 drift phonk hit, heavy 808 distortion, speed |
+| **DVRST - Close Eyes.mp3** | DVRST | Drift Phonk | Iconic Megamind glow-up viral anthem, bouncy cowbell |
+| **Hensonn - Sahara.mp3** | Hensonn | Dark Drift Phonk | Hypnotic night drive rhythm, aggressive acceleration |
+| **Ghostface Playa - Why Not.mp3** | Ghostface Playa | Memphis Phonk | Viral Dr. Livesey walking meme, heavyweight 808 stomp |
+| **Interworld - Metamorphosis.mp3** | Interworld | Electronic Phonk | High-velocity viral energy, intense synths, reel edits |
+| **g3ox_em - GigaChad Theme (Phonk House).mp3** | g3ox_em | Phonk House | Ultimate sigma male meme anthem, gym motivation drop |
+| **Orquestra Maldita - Brazilian Phonk.mp3** | DJ Samir & Shazam | Brazilian Phonk | Viral Favela funk groove, distorted drops, reel dance |
+| **Interworld - Rapture.mp3** | Interworld | Synth Phonk | Dark retro-futuristic driving synthwave-phonk blend |
+| **Montagem - PR Funk.mp3** | Montagem | Brazilian Funk Phonk | High-BPM Brazilian dance beat, energetic drops |
+| **Twisted - Worth Nothing.mp3** | Twisted (hanahata) | Melodic Phonk | Emotional drift melody contrasted with hard 808 bass |
+| **Tokyo Drift - Phonk Edition.mp3** | Antoshka | Tokyo Drift Phonk | Fast racing drift cowbell rhythm, high adrenaline |
 
----
-
-### 2. `Cinematic - Epic` (Grand, motivational, frontier adventure)
-| Track | Duration | Instruments | Feel / Style |
+#### ⚡ Viral EDM, Action, Dance & Memes
+| Track | Artist | Subgenre | Feel / Style |
 |---|---|---|---|
-| **Americana.mp3** | 3:22 | Brass, Strings, Horns, Flutes, Percussion | Grand, sweeping, triumphant frontier Americana |
-| **Pennsylvania Rose.mp3** | 1:19 | Guitar, Violin, Strings, Horns, Winds | Epic western overture, theatrical, uplifting |
-| **Neo Western.mp3** | 2:26 | Drums, Western Electric Guitar, Synths | Driving, cinematic western with heavy drums & reverb guitar |
+| **Monkeys Spinning Monkeys.mp3** | Kevin MacLeod | Viral Upbeat Meme | The most recognized viral TikTok background tune in history |
+| **Who Likes to Party.mp3** | Kevin MacLeod | Electronic Dance | High-energy party celebration drop, hype montage |
+| **Future Gladiator.mp3** | Kevin MacLeod | Action Electro-Rock | High-speed action, gaming battles, combat montage |
+| **Raving Energy.mp3** | Kevin MacLeod | Fast Techno | Driving 135+ BPM pulse, cardio, workout hype |
+| **Movement Proposition.mp3** | Kevin MacLeod | Synth Action | Relentless electronic tempo, momentum builder |
+| **The Complex.mp3** | Kevin MacLeod | Cyberpunk Electronic | Futuristic synth rhythm, sci-fi action drive |
+| **Volatile Reaction.mp3** | Kevin MacLeod | Hybrid Action Rock | Adrenaline rush, extreme sports, climax action |
 
----
-
-### 3. `Emotional - Sad` (Reflective, touching, melancholic ballad)
-| Track | Duration | Instruments | Feel / Style |
+#### 🪕 High-Speed Country & Bluegrass Swing
+| Track | Artist | Subgenre | Feel / Style |
 |---|---|---|---|
-| **Just As Soon.mp3** | 3:48 | Acoustic Guitar, Bass, Brushed Kit, Sax | Late-night reflection, dark, somber, calm acoustic ballad |
-| **Long Road Ahead.mp3** | 2:27 | Choir, Strings, Brass, Percussion | Mournful, emotional, somber folk melody |
-| **When The Wind Blows.mp3** | 4:26 | Acoustic Guitar, Atmospheric Winds | Slow, lilting, melancholic acoustic guitar |
+| **Still Pickin.mp3** | Kevin MacLeod | Bluegrass Banjo | Fast-paced, bouncy country banjo shuffle |
+| **Hillbilly Swing.mp3** | Kevin MacLeod | Country Swing | High-energy country swing & fiddle showdown |
+| **Bama Country.mp3** | Kevin MacLeod | Deep South Groove | Upbeat harmonica, violin & acoustic country groove |
+| **River Valley Breakdown.mp3** | Kevin MacLeod | Bluegrass Breakdown | High-speed bluegrass mandolin & banjo breakdown |
 
 ---
 
-### 4. `Energetic - Hype` (Fast, upbeat, driving bluegrass & country swing)
-| Track | Duration | Instruments | Feel / Style |
+### 2. `Chill - Ambient` (12 Tracks)
+*Relaxed, calming, aesthetic lofi, vlog background, coffee shop & study focus.*
+
+| Track | Artist | Subgenre | Feel / Style |
 |---|---|---|---|
-| **Still Pickin.mp3** | 4:58 | Banjo, Bass, Percussion, Harmonica | Fast-paced, bouncy, grooving country banjo shuffle |
-| **Hillbilly Swing.mp3** | 2:47 | Banjo, Fiddle, Bass, Guitar, Percussion | High-energy, upbeat country swing & fiddle |
-| **Bama Country.mp3** | 3:32 | Harmonica, Violin, Guitar, Bass, Accordion | Deep South upbeat, bouncy country groove |
-| **River Valley Breakdown.mp3** | 6:06 | Banjo, Mandolin, Fiddle, Bass, Kit | High-speed bluegrass breakdown |
+| **Carefree.mp3** | Kevin MacLeod | Acoustic Pop | Warm, sunny, feel-good vlog and lifestyle classic |
+| **Fluffing a Duck.mp3** | Kevin MacLeod | Cartoon Comedy | Silly, lighthearted, viral explainer & comedy background |
+| **Local Forecast - Elevator.mp3** | Kevin MacLeod | Elevator / Muzak | Iconic elevator waiting music, ironic chill vibe |
+| **Lobby Time.mp3** | Kevin MacLeod | Lo-Fi Jazz Lounge | Smooth acoustic piano, relaxed hotel lounge aesthetic |
+| **Airport Lounge.mp3** | Kevin MacLeod | Bossa Nova Lounge | Sophisticated smooth bossa nova, travel vlog aesthetic |
+| **Mining by Moonlight.mp3** | Kevin MacLeod | Lo-Fi Study Piano | Soft, gentle midnight contemplation, study focus |
+| **Danse Morialta.mp3** | Kevin MacLeod | Acoustic Folk | Peaceful, delicate acoustic fingerpicking lull |
+| **Deliberate Thought.mp3** | Kevin MacLeod | Deep Meditation | Soothing synthesizer pads, spacious reflective calming |
+| **Cattails.mp3** | Kevin MacLeod | Acoustic Country | Calming banjo, accordion and gentle drifting acoustic |
+| **Porch Swing Days - slower.mp3** | Kevin MacLeod | Porch Acoustic | Warm, feel-good front porch acoustic guitar melody |
+| **Porch Blues.mp3** | Kevin MacLeod | Acoustic Blues | Relaxed 12-bar front porch country blues |
+| **Clear Air.mp3** | Kevin MacLeod | Steel Guitar | Bright, easy-going acoustic fingerpicking |
 
 ---
 
-### 5. `Suspense - Thriller` (Dark western tension, dusty gothic blues)
-| Track | Duration | Instruments | Feel / Style |
+### 3. `Cinematic - Epic` (10 Tracks)
+*Grand orchestral, trailer rises, victory fanfare, battle confrontation & heroism.*
+
+| Track | Artist | Subgenre | Feel / Style |
 |---|---|---|---|
-| **Southern Gothic.mp3** | 2:27 | Banjos, 12-String Guitar, Choir, Percussion | Dark, eerie, mysterious gothic southern tension |
-| **Smoking Gun.mp3** | 3:08 | Bass Guitar, Electric Guitar, Strings, Choir | Gritty western standoff, tense suspense |
-| **Western Streets.mp3** | 1:49 | Snare, Tympani, Chimes, Gong | Tense, dramatic western percussive standoff |
-| **Crowd Hammer.mp3** | 3:27 | Guitar, Diddley Bow, Percussion, Flute | Eerie, dusty country blues suspense |
+| **Hero Down.mp3** | Kevin MacLeod | Trailer Orchestral | Dramatic buildup from tragic sacrifice to heroic victory |
+| **Prelude and Action.mp3** | Kevin MacLeod | Action Orchestral | Rapid strings, thundering percussion, cinematic pursuit |
+| **Crusade.mp3** | Kevin MacLeod | Choral Battle Epic | Monumental choir & brass power, historical triumph |
+| **Clash Defiant.mp3** | Kevin MacLeod | Modern War Epic | High stakes trailer intensity, battlefield clash |
+| **Five Armies.mp3** | Kevin MacLeod | Fantasy Climax | Massive fantasy army conflict, soaring heroic horns |
+| **Heroic Age.mp3** | Kevin MacLeod | Majestic Fanfare | Regal coronation, inspiring victory anthem |
+| **All This.mp3** | Kevin MacLeod | Cinematic Drama | Deep emotional weight, soaring orchestral swell |
+| **Americana.mp3** | Kevin MacLeod | Frontier Epic | Grand sweeping brass, strings & flute frontier adventure |
+| **Pennsylvania Rose.mp3** | Kevin MacLeod | Theatrical Overture | Epic western overture, uplifting and theatrical |
+| **Neo Western.mp3** | Kevin MacLeod | Driving Western | Heavy drums, western electric guitar & synths |
 
 ---
 
-## How CLIPER Uses These Tracks
+### 4. `Emotional - Sad` (8 Tracks)
+*Heartbreaking strings, weeping piano, tragic ballads, grief, and nostalgic loss.*
 
-1. **AI Selection**: CLIPER analyzes each clip and assigns a `music_category` (`chill_ambient`, `cinematic_epic`, `emotional_sad`, `energetic_hype`, `suspense_thriller`).
-2. **Random Track Selection**: CLIPER picks an available track from the corresponding category folder.
-3. **Smart Audio Mixing**: The track is looped seamlessly as needed and blended at **0.20 gain** (-14 dB) behind normalized voice speech (`loudnorm=I=-16:TP=-1.5`).
+| Track | Artist | Subgenre | Feel / Style |
+|---|---|---|---|
+| **Sad Trio.mp3** | Kevin MacLeod | Chamber Strings | Sorrowful cello, weeping violin, heartbreaking sadness |
+| **Heartbreaking.mp3** | Kevin MacLeod | Tragic Strings | Deep heartbreak, emotional farewell, tearjerker climax |
+| **Grave Blow.mp3** | Kevin MacLeod | Dark Sorrow | Mournful dark atmosphere, grief, solemn reflection |
+| **Constance.mp3** | Kevin MacLeod | Bittersweet Piano | Nostalgic, touching memory of lost loved ones |
+| **Mesmerize.mp3** | Kevin MacLeod | Atmospheric Sadness | Ethereal, haunting, quiet contemplative melancholy |
+| **Just As Soon.mp3** | Kevin MacLeod | Acoustic Ballad | Late-night reflection, dark somber acoustic ballad |
+| **Long Road Ahead.mp3** | Kevin MacLeod | Folk Mourning | Mournful choir and folk strings, sorrowful journey |
+| **When The Wind Blows.mp3** | Kevin MacLeod | Melancholic Guitar | Slow, lilting, bittersweet fingerstyle guitar |
+
+---
+
+### 5. `Suspense - Thriller` (12 Tracks)
+*Tension, sneaky mystery, plot twists, detective investigation, crime & dark horror.*
+
+| Track | Artist | Subgenre | Feel / Style |
+|---|---|---|---|
+| **Scheming Weasel faster.mp3** | Kevin MacLeod | Mischief & Plot Twist | Sneaky conspiracy, prank reveal, comedic suspense |
+| **Sneaky Snitch.mp3** | Kevin MacLeod | Viral Sneaky Theme | The #1 most viral stealth / tiptoeing meme music |
+| **Investigations.mp3** | Kevin MacLeod | Detective Mystery | Crime solving, uncovering clues, evidence reveal |
+| **Hitman.mp3** | Kevin MacLeod | Stealth Noir | Cold assassin in the shadows, tense tactical pulse |
+| **Unseen Horrors.mp3** | Kevin MacLeod | Psychological Horror | Chilling dread, eerie presence, supernatural tension |
+| **Right Behind You.mp3** | Kevin MacLeod | Stalker Pursuit | High-intensity danger, relentless footstep chase |
+| **Static Motion.mp3** | Kevin MacLeod | Tech Suspense | Cold cyber pulse, electronic crime investigation |
+| **Giant Wyrm.mp3** | Kevin MacLeod | Ominous Threat | Deep, approaching monster, heavy oppressive suspense |
+| **Southern Gothic.mp3** | Kevin MacLeod | Gothic Mystery | Dark southern eerie tension, banjos & choir |
+| **Smoking Gun.mp3** | Kevin MacLeod | Western Standoff | Gritty standoff, electric guitar and tense choir |
+| **Western Streets.mp3** | Kevin MacLeod | Dramatic Standoff | Percussive western tension with tympani and chimes |
+| **Crowd Hammer.mp3** | Kevin MacLeod | Dusty Suspense | Eerie country blues, tense waiting before violence |
+
+---
+
+## Automatic Selection Architecture
+
+CLIPER automatically classifies every detected clip into one of the five categories:
+1. `cinematic_epic` -> Picks from `music/Cinematic - Epic`
+2. `emotional_sad` -> Picks from `music/Emotional - Sad`
+3. `suspense_thriller` -> Picks from `music/Suspense - Thriller`
+4. `energetic_hype` -> Picks from `music/Energetic - Hype` (includes all viral Phonk & Hype tracks)
+5. `chill_ambient` -> Picks from `music/Chill - Ambient` (includes all Lofi & Vlog tracks)
+
+Each track is automatically looped seamlessly to match clip duration, normalized, and ducked during speaker dialogue.

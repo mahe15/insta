@@ -1,4 +1,7 @@
 export type Preferences = {
+  project_rules: string;
+  description_suffix: string;
+  overlay_text: string;
   editorial_profile: string;
   text_mode: string;
   sound_effects: boolean;
@@ -20,6 +23,9 @@ export type Preferences = {
   reframe: string;
   language: string;
   width: number;
+  fps: number;
+  color_grade: string;
+  export_quality: string;
   auto_render: boolean;
   layout: string;
   music: boolean;

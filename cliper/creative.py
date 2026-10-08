@@ -9,93 +9,96 @@ from .editorial import similarity, tokens
 CAROUSEL_BRIEF = """
 Build an original, high-impact Instagram carousel following these 10 core design rules:
 
-1. FONT & TYPOGRAPHY:
+1. SPLIT-SCENE LAYOUT (THE KEY FORMAT):
+Each carousel slide is ONE image divided into TWO VERTICALLY-STACKED SCENES.
+The top half shows Scene A, the bottom half shows Scene B.
+Both halves feature the SAME CHARACTER in DIFFERENT ENVIRONMENTS doing DIFFERENT ACTIONS.
+This creates an instant visual contrast (before/after, cause/effect, problem/solution, sacrifice/reward).
+The horizontal dividing line between the two halves should be a natural, clean visual break.
+Each half is approximately 1080×675 pixels within the full 1080×1350 portrait canvas.
+
+2. FONT & TYPOGRAPHY:
 Use a bold, modern sans-serif font with a thick/heavy weight similar to Montserrat ExtraBold, Anton, or Bebas Neue.
 Font must be clean, simple and highly readable on a phone.
 STRICTLY NEVER use decorative, cursive, thin, script, or handwritten fonts.
 
-2. FONT SIZE:
-Text must be large, punchy and dominant on the slide.
-Main headline / primary numbers: approximately 8–12% of image height (108–162px on 1080x1350).
-Secondary text: approximately 6–9% of image height (80–120px).
-Never make text small just to fit more words. If the sentence doesn't fit, shorten the sentence instead of reducing font size.
+3. FONT SIZE:
+Text must be large, punchy and dominant within each half.
+Main headline / primary numbers: approximately 8–12% of each half's height.
+Never make text small just to fit more words. Shorten the sentence instead.
 
-3. TEXT COLOUR:
+4. TEXT COLOUR:
 Strict primary text palette:
 - Main text: solid crisp WHITE.
-- Important numbers / key impact keywords: vibrant bold RED.
-Use only these primary text colours. Example: "20 PUSH-UPS" in RED, "PER DAY" in WHITE.
+- Important numbers / key impact keywords: vibrant bold RED or ORANGE.
+Use only these primary text colours. Example: "Quit" in WHITE, "Porn" in RED on the top half; "Energy" in RED, "Back" in WHITE on the bottom half.
 Maintain strong contrast against the background at all times.
 
-4. TEXT LENGTH:
-Very little text. Prefer 1 single line; maximum 2 short lines.
-NEVER use paragraphs or blocks of text on the image.
-Target approximately 3–8 words per slide.
-The image must communicate the story, not a block of text.
+5. TEXT ON EACH HALF:
+Each half has its OWN short bold text line (2–5 words max per half).
+The top-half text and bottom-half text form a contrasting pair that tells the slide's story.
+Examples: "Quit Porn" / "Energy Back", "Build Body" / "Confidence Back", "I only got 10 views" / "10 Views:".
+The TEXT IS PART OF THE IMAGE, rendered directly over each scene.
 
-5. DAILY → YEARLY COMPARISON:
-Every applicable post should create a clear small daily action → huge yearly result comparison.
-Always calculate the number correctly (e.g. 10 PAGES A DAY → 3,650 PAGES A YEAR; 50 PUSH-UPS A DAY → 18,250 PUSH-UPS A YEAR; 30 MINUTES A DAY → 182.5 HOURS A YEAR).
-Make the compound yearly number visually prominent and highlighted in bold RED.
-
-6. VISUAL COMPARISON & PROGRESSION:
-Show the difference visually across the sequence: before vs. after, wasted time vs. invested time, weak/starting state vs. developed/competent state.
-Keep the same character throughout the carousel:
-- Beginning slides: darker/cooler/less developed starting state.
-- Ending slides: brighter/warmer/stronger/more confident posture and resolve.
-The transformation should be obvious from the visual alone without needing to read a paragraph.
+6. VISUAL CONTRAST WITHIN EACH SLIDE:
+The two halves must show a clear visual contrast:
+- TOP HALF: The problem, sacrifice, starting state, daily action, or loss. Darker, cooler, moodier atmosphere.
+- BOTTOM HALF: The reward, result, transformation, payoff, or gain. Warmer, brighter, more energetic atmosphere.
+The character's pose, expression, and surroundings change between halves to tell the story visually.
 
 7. CHARACTER CONSISTENCY:
-Use one original protagonist throughout the entire carousel.
-Same face, hairstyle, athletic/muscular body proportions and overall identity on every slide.
-Anime-inspired, muscular/athletic male character.
-Dark clothing with subtle red accents.
-Serious, disciplined, focused expression.
-Do not randomly change the character between slides.
+Use one original protagonist throughout the entire carousel AND across BOTH halves of each slide.
+Same face, hairstyle, body proportions and identity everywhere.
+The character should be recognizable as the same person in different situations.
+Do NOT randomly change the character between slides or halves.
 
 8. COMPOSITION & PLACEMENT:
-Use 4:5 Instagram portrait format (1080×1350).
-Character should occupy a major portion of the frame (cinematic medium/close framing).
-Keep the character's face, eyes, and key action completely unobstructed.
-Place text in a quiet high-contrast negative-space zone (minimum 100px side/top margins, 150px bottom margin).
-Use cinematic environments and depth; avoid clutter.
+Use 4:5 Instagram portrait format (1080×1350) total canvas.
+Each half (~1080×675) is a complete cinematic scene with the character prominently placed.
+Place text in a high-contrast zone within each half (centre-bottom of each half works best).
+Use cinematic environments with depth and detail; avoid clutter.
+Keep the character's face and key action unobstructed by text.
 
 9. OVERALL VISUAL STYLE:
 Premium cinematic anime illustration (cinematic movie frame quality, not generic AI clip-art).
-Dramatic lighting, detailed environment, strong shadows and highlights.
-Dark → warm visual progression across the carousel.
+Dramatic lighting, detailed environments, strong shadows and highlights.
 High detail, sharp anatomy, realistic perspective.
-No watermarks, random logos, unnecessary graphics, or UI elements.
+No watermarks, random logos, unnecessary graphics, decorative borders, or UI elements.
 
-10. THE GOLDEN RULE — SIMPLICITY:
-ONE IDEA PER SLIDE. The viewer should understand the message in 1–2 seconds.
-Prioritize in this order: HOOK → NUMBER → VISUAL → EMOTION.
-NEVER: LONG TEXT → SMALL FONT → CLUTTERED IMAGE.
+10. THE GOLDEN RULE — INSTANT CONTRAST:
+Each slide tells ONE contrasting story through TWO scenes. The viewer grasps the message in 1–2 seconds.
+Prioritize: VISUAL CONTRAST → BOLD TEXT → EMOTION → CHARACTER.
+NEVER: LONG TEXT → SMALL FONT → SINGLE BORING SCENE → CLUTTERED IMAGE.
 """
 
 BLUEPRINTS = {
-    "dark": {"formats": ["small daily action vs huge yearly result", "daily habit compounding", "mistake and alternative"],
-             "visual_arc": "dark/cool/isolated starting state → deliberate discipline → bright/warm confident strength",
-             "palette": "deep charcoal, crisp white type with vibrant bold red number/keyword accents",
+    "dark": {"formats": ["sacrifice / reward split", "bad habit quit / benefit gained", "daily action / yearly compounding", "mistake / correct alternative"],
+             "split_style": "Top half: dark, moody, isolated problem state. Bottom half: bright, warm, disciplined reward state.",
+             "visual_arc": "Each slide contrasts a dark sacrifice/problem (top) with its bright reward/outcome (bottom)",
+             "palette": "deep charcoal backgrounds, crisp white type with vibrant bold red/orange keyword accents",
              "protagonist": "anime-inspired muscular athletic male, dark clothing with subtle red accents, disciplined serious expression",
              "audience": "a driven young adult building daily discipline and compounding habits"},
-    "men": {"formats": ["daily workout compounding", "small daily action vs yearly result", "confidence through practice"],
-            "visual_arc": "cool uncertainty/weak start → grounded practice → warm powerful competence and strength",
+    "men": {"formats": ["weak habit / strong alternative", "daily workout / yearly body transformation", "avoidance / confidence through action"],
+            "split_style": "Top half: hesitant, untrained, uncertain. Bottom half: trained, confident, powerful.",
+            "visual_arc": "Each slide contrasts a weak starting state (top) with grounded competence (bottom)",
             "palette": "midnight navy/charcoal, crisp white type with bold red metric highlights",
             "protagonist": "anime-inspired muscular athletic male, dark athletic gear with subtle red accents, disciplined serious expression",
             "audience": "a young man building daily fitness, focus, and grounded competence"},
-    "money": {"formats": ["small daily saving vs yearly wealth", "daily spend trade-off", "delayed gratification comparison"],
-              "visual_arc": "cool-toned financial friction → deliberate daily choice → warm empowered stability and freedom",
+    "money": {"formats": ["wasteful spending / smart saving", "daily latte cost / yearly wealth", "instant gratification / delayed reward"],
+              "split_style": "Top half: impulsive spending, consumerism. Bottom half: financial freedom, strategic calm.",
+              "visual_arc": "Each slide contrasts financial friction (top) with empowered stability (bottom)",
               "palette": "deep charcoal, crisp white type with bold red calculation highlights",
               "protagonist": "anime-inspired muscular athletic male, dark sleek clothing with subtle red accents, focused serious expression",
               "audience": "someone who wants to see the huge yearly power of small daily financial choices"},
-    "tech": {"formats": ["daily 30-min skill build vs 180h yearly mastery", "simple mechanism", "focus vs distraction"],
-             "visual_arc": "cool cluttered distraction → focused practice → warm high-agency mastery",
+    "tech": {"formats": ["distraction / focused learning", "30-min daily skill / yearly mastery", "scroll doom / build future"],
+             "split_style": "Top half: distracted, cluttered screens, wasted time. Bottom half: focused, coding/building, mastery.",
+             "visual_arc": "Each slide contrasts digital distraction (top) with high-agency mastery (bottom)",
              "palette": "midnight obsidian, pure white type with vivid red keyword accents",
              "protagonist": "anime-inspired muscular athletic male, dark techwear with subtle red accents, intense focused gaze",
              "audience": "a curious builder using daily focused habits to master technology and AI"},
-    "finance": {"formats": ["daily dollar compounding", "risk trade-off", "small daily investment vs yearly capital"],
-                "visual_arc": "uncertain cool start → disciplined daily capital allocation → warm commanding financial security",
+    "finance": {"formats": ["daily spend / yearly loss", "risky shortcut / steady compound growth", "ignorance / financial literacy"],
+                "split_style": "Top half: uncertain, risky, uninformed. Bottom half: commanding, secure, strategic.",
+                "visual_arc": "Each slide contrasts uncertain financial friction (top) with commanding security (bottom)",
                 "palette": "charcoal/deep forest, pure white type with bold red numeric highlights",
                 "protagonist": "anime-inspired muscular athletic male, sharp dark tailored clothing with subtle red accents, disciplined confident expression",
                 "audience": "a disciplined person learning the compound interest of daily decisions"},
@@ -140,18 +143,38 @@ def slide_prompt(plan, slide, index, brand, niche, feedback=None, user_prompt=No
     from .prompts import get_prompt
     total = len(plan.slides)
     last = index == total
+    blueprint = BLUEPRINTS.get(niche, {})
+
+    # Build split-scene descriptions if present
+    has_split = slide.top_scene is not None and slide.bottom_scene is not None
+    if has_split:
+        top = slide.top_scene
+        bottom = slide.bottom_scene
+        split_description = (
+            f"TOP HALF (~1080×675): Scene showing '{top.text}'. "
+            f"Environment: {top.environment}. Action: {top.action}. "
+            f"Lighting: {top.lighting}. Mood: {top.mood}. "
+            f"Render the text '{top.text}' in bold over this scene.\n"
+            f"BOTTOM HALF (~1080×675): Scene showing '{bottom.text}'. "
+            f"Environment: {bottom.environment}. Action: {bottom.action}. "
+            f"Lighting: {bottom.lighting}. Mood: {bottom.mood}. "
+            f"Render the text '{bottom.text}' in bold over this scene."
+        )
+    else:
+        split_description = f"Single scene: {slide.environment}. {slide.action}"
+
     if index == 1:
-        arc_note = "Beginning state: darker, cooler, moody atmosphere, starting/less developed state with focused determination."
+        arc_note = "Opening contrast: strongest difference between top (dark problem) and bottom (bright reward) to hook attention."
     elif last:
-        arc_note = "Final payoff: brightest, warmest lighting, peak physical and mental strength, victorious, confident, grounded resolve."
+        arc_note = "Final payoff: the most dramatic and satisfying contrast. Top shows the biggest sacrifice, bottom shows the ultimate reward."
     else:
         pct = int((index / total) * 100)
-        arc_note = f"Progressive transformation ({pct}% journey): transitioning from cool tones into warmer, brighter lighting, visibly stronger, disciplined and developing competence."
+        arc_note = f"Mid-journey contrast ({pct}%): deepening the narrative. Top half shows a progressively harder challenge, bottom half shows a progressively greater reward."
 
     swipe_note = (
         "This is the final payoff slide; no swipe marker."
         if last else
-        "Leave the bottom-right 300x140px free for the swipe overlay added afterward."
+        "Leave the bottom-right 300×140px of the bottom half free for the swipe overlay added afterward."
     )
     user_prompt_section = (
         f"\n=== USER CREATIVE DIRECTION ===\n{user_prompt}\n"
@@ -173,8 +196,9 @@ def slide_prompt(plan, slide, index, brand, niche, feedback=None, user_prompt=No
                 context_json=json.dumps([s.text for s in plan.slides], ensure_ascii=False),
                 slide_text_json=json.dumps(slide.text, ensure_ascii=False),
                 brand_json=json.dumps(brand, ensure_ascii=False),
-                niche_json=json.dumps(BLUEPRINTS.get(niche, {}), ensure_ascii=False),
+                niche_json=json.dumps(blueprint, ensure_ascii=False),
                 scene_json=slide.model_dump_json(),
+                split_scene_json=json.dumps({"has_split": has_split, "description": split_description}, ensure_ascii=False),
                 user_prompt_section=user_prompt_section,
                 feedback_section=feedback_section,
             )
@@ -183,15 +207,19 @@ def slide_prompt(plan, slide, index, brand, niche, feedback=None, user_prompt=No
 
     return (
         template + "\n\n"
+        f"=== SPLIT-SCENE LAYOUT ===\n"
+        f"{split_description}\n\n"
         f"Visual progression (Slide {index}/{total}): {arc_note}\n"
         f"{swipe_note}\n\n"
         f"Slide {index}/{total}. Full narrative context: "
         + json.dumps([s.text for s in plan.slides], ensure_ascii=False)
-        + "\n\nRender ONLY the following exact text on THIS image, once, with correct spelling:\n"
+        + "\n\nRender ONLY the following exact text on THIS image, with correct spelling:\n"
         + json.dumps(slide.text, ensure_ascii=False)
-        + "\n(Apply colour rule: render key numbers and crucial impact words in bold RED, and surrounding text in crisp WHITE. Do not print prompt instructions, metadata, or labels on the artwork.)\n"
+        + (f"\nTOP HALF TEXT: {json.dumps(slide.top_scene.text, ensure_ascii=False)}" if has_split else "")
+        + (f"\nBOTTOM HALF TEXT: {json.dumps(slide.bottom_scene.text, ensure_ascii=False)}" if has_split else "")
+        + "\n(Apply colour rule: render key numbers and crucial impact words in bold RED or ORANGE, and surrounding text in crisp WHITE. Do not print prompt instructions, metadata, or labels on the artwork.)\n"
         + "BRAND: " + json.dumps(brand, ensure_ascii=False) + "\n"
-        + "SERIES DIRECTION: " + json.dumps(BLUEPRINTS.get(niche, {}), ensure_ascii=False) + "\n"
+        + "SERIES DIRECTION: " + json.dumps(blueprint, ensure_ascii=False) + "\n"
         + "SCENE: " + slide.model_dump_json()
         + (user_prompt_section if user_prompt else "")
         + feedback_section

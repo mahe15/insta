@@ -9,7 +9,7 @@ import unicodedata
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
 from pydantic import Field, field_validator
@@ -50,6 +50,14 @@ def text_weight(text: str) -> int:
                or 0x2032 <= ord(c) <= 0x2037 else 2 for c in text)
 
 
+def citation_key(url: str) -> str:
+    """Ignore attribution tags without discarding query parameters identifying a story."""
+    parsed = urlsplit(public_url(url))
+    query = [(k, v) for k, v in parse_qsl(parsed.query, keep_blank_values=True)
+             if not k.lower().startswith("utm_") and k.lower() not in {"fbclid", "gclid"}]
+    return urlunsplit((parsed.scheme, parsed.netloc.lower(), parsed.path.rstrip("/"), urlencode(query), ""))
+
+
 def check_text(text: str):
     if not text.strip() or text_weight(text) > 280:
         raise ValueError("Keep the complete post within 280 weighted characters, including source and media credit")
@@ -62,6 +70,7 @@ def check_text(text: str):
 class XSettings(Model):
     handle: str = ""
     enabled: bool = True
+    publishing_enabled: bool = False
     auto_publish: bool = False
     browser_risk_accepted: bool = False
     daily_limit: int = Field(default=4, ge=1, le=12)
@@ -157,9 +166,14 @@ def evidence_flags(result: ResearchResult, links: list[str], hours: int, now=Non
         flags.append("Sources are not from two independent domains")
     if not any(s.primary for s in result.sources):
         flags.append("No primary source")
-    observed = {public_url(link).rstrip("/") for link in links if link.startswith("https://")
-                and urlsplit(link).hostname not in {"chatgpt.com", "www.chatgpt.com"}}
-    if sum(s.url.rstrip("/") in observed for s in result.sources) < 2:
+    observed = set()
+    for link in links:
+        try:
+            if urlsplit(link).hostname not in {"chatgpt.com", "www.chatgpt.com"}:
+                observed.add(citation_key(link))
+        except ValueError:
+            continue
+    if len({citation_key(s.url) for s in result.sources} & observed) < 2:
         flags.append("Two source URLs were not corroborated by visible ChatGPT citation links")
     if any(s.published_at is None for s in result.sources):
         flags.append("A source publication date is unknown")
@@ -172,7 +186,9 @@ async def research(cfg, request: ResearchInput, recent_topics: list[str], media_
     async with BrowserEditorialClient(cfg) as client:
         prompt = (f"Current UTC time: {now.isoformat()}. Only developments AFTER {(now - timedelta(hours=request.hours)).isoformat()}.\n"
             f"Category brief: {CATEGORIES[request.category]['brief']}\nRequest: {request.model_dump_json()}\n"
-            f"Already covered; find a DIFFERENT story: {recent_topics[-20:]}")
+            f"Already covered; find a DIFFERENT story: {recent_topics[-20:]}\n"
+            "Every sources[].url must contain the actual full HTTPS page URL, never a citation marker or contentReference token. "
+            "Include visible clickable citations for those exact pages outside the JSON code block.")
         from .prompts import get_prompt
         research_instructions = get_prompt("x_research_prompt") or RESEARCH
         draft_instructions = get_prompt("x_draft_prompt") or DRAFT

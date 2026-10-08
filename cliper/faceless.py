@@ -44,9 +44,20 @@ Headlines are topic inspiration, not verified evidence for factual claims. Prefe
 Provide arithmetic claims with a numeric expression, result and explanation so Python can verify them.
 Finance is general education about risk, habits and concepts, not security picks or return forecasts.
 Score honestly; reserve 90+ for outstanding hooks, share/save value, originality and brand fit.
-The first slide hooks attention, middle slides develop one idea, and the last slide delivers a clear CTA.
+
+CRITICAL FORMAT: Each slide is a SPLIT-SCENE image with TWO VERTICALLY-STACKED contrasting scenes:
+- TOP HALF: Shows the problem, sacrifice, starting state, or daily action. Darker/cooler mood.
+- BOTTOM HALF: Shows the reward, result, transformation, or payoff. Warmer/brighter mood.
+Both halves feature the same character in different environments. Each half has its own short bold text (2–5 words).
+Example slide pairs: "Quit Porn" / "Energy Back", "Build Body" / "Confidence Back", "Regret at 44" / "Starts at 20".
+
+For each slide, provide: text (overall slide text combining both halves), plus top_scene and bottom_scene
+with separate text, environment, action, lighting, and mood for each half.
+
+The first slide hooks attention with the strongest contrast, middle slides develop the idea with
+varied contrasts, and the last slide delivers a clear CTA with the most satisfying reward visual.
 Captions must be natural and contain no hashtags; put no more than five in the hashtags array.
-Gemini will render all artwork AND exact slide text. Keep each slide's text brief, readable and well-spaced.
+Gemini will render all artwork AND exact slide text. Keep each half's text ultra-brief and well-spaced.
 """ + CAROUSEL_BRIEF
 
 

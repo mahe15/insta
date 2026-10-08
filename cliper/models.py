@@ -47,6 +47,9 @@ class Transcript(Model):
 
 
 class Preferences(Model):
+    project_rules: str = Field(default="", max_length=2000)
+    description_suffix: str = Field(default="", max_length=500)
+    overlay_text: str = Field(default="", max_length=80)
     editorial_profile: Literal["standard", "ishowspeed"] = "standard"
     text_mode: Literal["romanized", "english", "source"] = "romanized"
     sound_effects: bool = True
@@ -68,6 +71,9 @@ class Preferences(Model):
     reframe: Literal["auto", "blur", "center"] = "auto"
     language: str = "auto"
     width: Literal[360, 720, 1080] = 1080
+    fps: Literal[30, 60] = 60
+    color_grade: Literal["off", "natural", "vivid"] = "natural"
+    export_quality: Literal["high", "compact"] = "high"
     auto_render: bool = False
     layout: Literal["square_hook", "legacy"] = "square_hook"
     music: bool = True
@@ -90,6 +96,12 @@ class Preferences(Model):
 
     @model_validator(mode="after")
     def lengths(self):
+        import re
+        self.project_rules = self.project_rules.strip()
+        self.description_suffix = self.description_suffix.strip()
+        self.overlay_text = " ".join(self.overlay_text.split())
+        if len(set(t.casefold() for t in re.findall(r"#(\w+)", self.description_suffix))) > 5:
+            raise ValueError("Use at most five required hashtags in the description text")
         if self.editorial_profile == "ishowspeed":
             self.text_mode = "english"
             if self.min_seconds > 60 or self.max_seconds > 60:

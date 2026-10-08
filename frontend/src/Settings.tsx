@@ -234,6 +234,29 @@ export default function Settings() {
                     ["center", "Center crop"],
                     ["blur", "Preserve frame + blur"],
                   ])}
+                  {select(
+                    "fps",
+                    "Export frame rate",
+                    [
+                      [60, "60 fps"],
+                      [30, "30 fps"],
+                    ],
+                    "Lower-frame-rate sources retain their original motion.",
+                  )}
+                  {select(
+                    "export_quality",
+                    "Export quality",
+                    [
+                      ["high", "High-quality master"],
+                      ["compact", "Compact · Telegram size budget"],
+                    ],
+                    "Large masters get a separate smaller Telegram delivery copy.",
+                  )}
+                  {select("color_grade", "Colour finish", [
+                    ["natural", "Natural · subtle contrast and detail"],
+                    ["vivid", "Vivid · restrained extra colour"],
+                    ["off", "Off · preserve source look"],
+                  ])}
                   {number(
                     "min_seconds",
                     "Minimum clip length · seconds",
@@ -1759,7 +1782,9 @@ function AIPromptsManager() {
       await promptsQuery.refetch();
       setEditing({});
       setResetAllModal(false);
-      notify("All prompts across all features have been reset to factory defaults.");
+      notify(
+        "All prompts across all features have been reset to factory defaults.",
+      );
     } catch (e) {
       notify((e as Error).message, true);
     } finally {
@@ -1768,7 +1793,8 @@ function AIPromptsManager() {
   }
 
   function insertVariable(key: string, variable: string) {
-    const current = editing[key] ?? prompts.find((p) => p.key === key)?.value ?? "";
+    const current =
+      editing[key] ?? prompts.find((p) => p.key === key)?.value ?? "";
     setEditing((prev) => ({
       ...prev,
       [key]: current + " " + variable,
@@ -1850,7 +1876,10 @@ function AIPromptsManager() {
             {filtered.map((p) => {
               const currentVal = editing[p.key] ?? p.value;
               const isDirty = currentVal !== p.value;
-              const wordCount = currentVal.trim().split(/\s+/).filter(Boolean).length;
+              const wordCount = currentVal
+                .trim()
+                .split(/\s+/)
+                .filter(Boolean).length;
               const showDiff = !!diffView[p.key];
 
               return (
@@ -2036,4 +2065,3 @@ function AIPromptsManager() {
     </div>
   );
 }
-
