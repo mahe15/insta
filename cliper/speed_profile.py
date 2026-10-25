@@ -29,7 +29,7 @@ def preset(base: Preferences, **overrides) -> Preferences:
         "editorial_profile": "ishowspeed", "text_mode": "english", "min_seconds": 6,
         "max_seconds": 60, "clipping_mode": "gemini_browser", "gemini_verify_captions": True,
         "layout": "square_hook", "style": "bold", "preserve_wide_groups": True,
-        "trim_edges": False, "music_gain": .10, "sound_effects": True,
+        "trim_edges": False, "music_gain": .50, "sound_effects": True,
         "sfx_gain": .12, "reaction_zoom": True,
     } | overrides)
 

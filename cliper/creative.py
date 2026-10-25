@@ -164,9 +164,9 @@ def slide_prompt(plan, slide, index, brand, niche, feedback=None, user_prompt=No
         split_description = f"Single scene: {slide.environment}. {slide.action}"
 
     if index == 1:
-        arc_note = "Opening contrast: strongest difference between top (dark problem) and bottom (bright reward) to hook attention."
+        arc_note = "Opening contrast: strongest difference between top (darker, cooler problem) and bottom (bright reward) to hook attention."
     elif last:
-        arc_note = "Final payoff: the most dramatic and satisfying contrast. Top shows the biggest sacrifice, bottom shows the ultimate reward."
+        arc_note = "Final payoff: the most dramatic and satisfying contrast (brightest, warmest visual). Top shows the biggest sacrifice, bottom shows the ultimate reward."
     else:
         pct = int((index / total) * 100)
         arc_note = f"Mid-journey contrast ({pct}%): deepening the narrative. Top half shows a progressively harder challenge, bottom half shows a progressively greater reward."

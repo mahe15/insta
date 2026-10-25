@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
   ArrowRight,
+  Calendar,
+  CalendarClock,
   Check,
   CheckCheck,
   CheckCircle2,
@@ -17,6 +19,7 @@ import {
   Globe,
   Info,
   Layers,
+  ListOrdered,
   Play,
   RefreshCw,
   Scissors,
@@ -24,13 +27,14 @@ import {
   Send,
   Settings2,
   Share2,
+  Sparkles,
   Square,
   TriangleAlert,
   X,
   Youtube,
 } from "lucide-react";
 import { api, dateTime, providerName, seconds } from "./api";
-import type { Clip, Job, YouTubeConnections } from "./types";
+import type { Clip, Job, YouTubeConnections, ScheduleAllResult } from "./types";
 import {
   Badge,
   Button,
@@ -43,6 +47,7 @@ import {
   Switch,
   useStudio,
 } from "./ui";
+import ProjectRules from "./ProjectRules";
 
 const categories = {
   cinematic_epic: "Cinematic / Epic",
@@ -50,6 +55,7 @@ const categories = {
   suspense_thriller: "Suspense / Thriller",
   energetic_hype: "Energetic / Hype",
   chill_ambient: "Chill / Ambient",
+  phonk: "Phonk",
 };
 export default function Project() {
   const { id } = useParams(),
@@ -67,10 +73,20 @@ export default function Project() {
     [confirm, setConfirm] = useState(false),
     [dirty, setDirty] = useState(false),
     [editSettings, setEditSettings] = useState(false),
-    [publishClip, setPublishClip] = useState<Clip | null>(null);
+    [publishClip, setPublishClip] = useState<Clip | null>(null),
+    [scheduleAllOpen, setScheduleAllOpen] = useState(false);
   const job = query.data,
     clips = job?.analysis?.clips || [],
+    renderedClips = clips.filter((c) => Boolean(c.video)),
     clip = clips.find((c) => c.id === current) || clips[0];
+  const isClipLiveOnYt = (c: Clip) =>
+    Boolean(
+      c.publications?.some(
+        (p) => (p.platform === "youtube" || !p.platform) && p.state === "published",
+      ),
+    );
+  const liveYtClips = renderedClips.filter(isClipLiveOnYt);
+  const schedulableClips = renderedClips.filter((c) => !isClipLiveOnYt(c));
   useEffect(() => {
     setSelected([]);
     setCurrent(null);
@@ -173,6 +189,27 @@ export default function Project() {
               Render {selected.length || ""} selected
             </Button>
           )}
+          {renderedClips.length > 0 &&
+            (schedulableClips.length > 0 ? (
+              <Button
+                icon={CalendarClock}
+                variant="primary"
+                className="btn-schedule-all-hero"
+                onClick={() => setScheduleAllOpen(true)}
+              >
+                Schedule all ({schedulableClips.length})
+              </Button>
+            ) : (
+              <Button
+                icon={CheckCheck}
+                variant="ghost"
+                disabled
+                className="btn-all-live-hero"
+                title="All rendered clips are already live on YouTube"
+              >
+                All clips live ({liveYtClips.length})
+              </Button>
+            ))}
         </div>
       </div>
       {job.error && (
@@ -235,19 +272,40 @@ export default function Project() {
             <h2>
               Shortlist <span className="count">{clips.length}</span>
             </h2>
-            {editable && (
-              <button
-                onClick={() =>
-                  setSelected(
-                    selected.length === clips.length
-                      ? []
-                      : clips.map((c) => c.id),
-                  )
-                }
-              >
-                {selected.length === clips.length ? "Clear" : "Select all"}
-              </button>
-            )}
+            <div className="shortlist-heading-btns">
+              {renderedClips.length > 0 &&
+                (schedulableClips.length > 0 ? (
+                  <button
+                    type="button"
+                    className="shortlist-schedule-all-btn"
+                    title={`Schedule ${schedulableClips.length} remaining clips with custom interval`}
+                    onClick={() => setScheduleAllOpen(true)}
+                  >
+                    <CalendarClock size={13} />
+                    <span>Schedule all ({schedulableClips.length})</span>
+                  </button>
+                ) : (
+                  <span
+                    className="shortlist-all-live-badge"
+                    title="All rendered clips are already published on YouTube"
+                  >
+                    <CheckCheck size={12} /> All live
+                  </span>
+                ))}
+              {editable && (
+                <button
+                  onClick={() =>
+                    setSelected(
+                      selected.length === clips.length
+                        ? []
+                        : clips.map((c) => c.id),
+                    )
+                  }
+                >
+                  {selected.length === clips.length ? "Clear" : "Select all"}
+                </button>
+              )}
+            </div>
           </div>
           {clips.length ? (
             clips.map((c, index) => (
@@ -311,6 +369,19 @@ export default function Project() {
                           title="Published to YouTube Shorts"
                         >
                           <span className="yt-dot" /> Live
+                        </span>
+                      ) : null}
+                      {c.publications?.some((p) => p.state === "queued") ? (
+                        <span
+                          className="shortlist-scheduled-badge"
+                          title={(() => {
+                            const qp = c.publications.find((p) => p.state === "queued");
+                            return qp?.due
+                              ? `Scheduled for ${new Date(qp.due * 1000).toLocaleString()}`
+                              : "Scheduled in queue";
+                          })()}
+                        >
+                          <Clock3 size={11} /> Scheduled
                         </span>
                       ) : null}
                       <span
@@ -464,6 +535,12 @@ export default function Project() {
         job={job}
         open={!!publishClip}
         setOpen={(v: boolean) => !v && setPublishClip(null)}
+      />
+      <ScheduleAllModal
+        job={job}
+        renderedClips={renderedClips}
+        open={scheduleAllOpen}
+        setOpen={setScheduleAllOpen}
       />
       <Modal
         open={confirm}
@@ -624,6 +701,29 @@ function ClipEditor({
                       Watch Short <ExternalLink size={12} />
                     </a>
                   )}
+                </div>
+              ))}
+            {clip.publications
+              ?.filter((p) => p.state === "queued")
+              .map((pub) => (
+                <div key={pub.id} className="clip-scheduled-banner">
+                  <div className="scheduled-banner-left">
+                    <Clock3 size={13} className="scheduled-clock-icon" />
+                    <strong>Scheduled for release:</strong>
+                    <span>
+                      {pub.due
+                        ? new Date(pub.due * 1000).toLocaleString([], {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : "Queued"}
+                    </span>
+                  </div>
+                  <span className="scheduled-platform-pill">
+                    {pub.platform === "youtube" ? "YouTube Shorts" : "Instagram"}
+                  </span>
                 </div>
               ))}
           </div>
@@ -1105,7 +1205,7 @@ function ProjectPreferences({
         <input
           type="range"
           min="0"
-          max="0.3"
+          max="1"
           step="0.01"
           value={draft.music_gain}
           onChange={(e) => setDraft({ ...draft, music_gain: +e.target.value })}
@@ -1483,4 +1583,676 @@ function PublishClipModal({
     </Modal>
   );
 }
-import ProjectRules from "./ProjectRules";
+
+function ScheduleAllModal({
+  job,
+  renderedClips,
+  open,
+  setOpen,
+}: {
+  job: Job;
+  renderedClips: Clip[];
+  open: boolean;
+  setOpen: (o: boolean) => void;
+}) {
+  const { notify, refresh } = useStudio();
+  const connectionsQuery = useQuery({
+    queryKey: ["youtube-connections"],
+    queryFn: () => api<YouTubeConnections>("/youtube/connections"),
+    enabled: open,
+  });
+
+  const [platform, setPlatform] = useState<"youtube" | "instagram">("youtube");
+  const [account, setAccount] = useState("main");
+  const [privacy, setPrivacy] = useState("public");
+  const [gapHours, setGapHours] = useState(2.0);
+  const [startMode, setStartMode] = useState<"now" | "custom">("now");
+  const [customStartTime, setCustomStartTime] = useState(() => {
+    const d = new Date(Date.now() + 3600 * 1000);
+    d.setMinutes(Math.ceil(d.getMinutes() / 15) * 15, 0, 0);
+    const tzOffset = d.getTimezoneOffset() * 60000;
+    return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [scheduleResult, setScheduleResult] = useState<ScheduleAllResult | null>(null);
+
+  const GAP_PRESETS = [1, 2, 3, 4, 6, 12, 24];
+
+  useEffect(() => {
+    if (open) {
+      setScheduleResult(null);
+      if (connectionsQuery.data?.accounts?.length) {
+        const authed = connectionsQuery.data.accounts.find((a) => a.authorized);
+        if (authed) {
+          setAccount(authed.key);
+          setPrivacy(authed.privacy || "public");
+        } else {
+          setAccount(connectionsQuery.data.accounts[0].key);
+        }
+      }
+    }
+  }, [open, connectionsQuery.data]);
+
+  const ytAccounts = connectionsQuery.data?.accounts || [];
+  const selectedYtAccount = ytAccounts.find((a) => a.key === account);
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  const isClipLive = (c: Clip) => {
+    return Boolean(
+      c.publications?.some((p) => {
+        const plat = (p.platform || "youtube").toLowerCase();
+        const targetPlat = platform.toLowerCase();
+        const isMatch =
+          (targetPlat === "youtube" && (plat === "youtube" || plat === "yt")) ||
+          (targetPlat === "instagram" && (plat === "instagram" || plat === "ig")) ||
+          plat === targetPlat;
+        return isMatch && p.state === "published";
+      }),
+    );
+  };
+
+  const skippedLiveClips = renderedClips.filter(isClipLive);
+  const schedulableClips = renderedClips.filter((c) => !isClipLive(c));
+
+  const baseSec =
+    startMode === "now"
+      ? nowSec
+      : customStartTime
+        ? Math.floor(new Date(customStartTime).getTime() / 1000)
+        : nowSec;
+  const safeGap = Math.max(0.1, Number(gapHours) || 2.0);
+  const gapSec = Math.round(safeGap * 3600);
+
+  const timelineItems = schedulableClips.map((c, idx) => {
+    const dueSec = baseSec + idx * gapSec;
+    const dateObj = new Date(dueSec * 1000);
+    const timeFormatted = dateObj.toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    const dateFormatted = dateObj.toLocaleDateString([], {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+    const offsetLabel =
+      idx === 0
+        ? startMode === "now"
+          ? `Immediate (Clip #${c.id})`
+          : `Start (Clip #${c.id})`
+        : `+${(idx * safeGap).toFixed(1).replace(/\.0$/, "")}h`;
+    return {
+      clip: c,
+      dueSec,
+      timeFormatted,
+      dateFormatted,
+      offsetLabel,
+    };
+  });
+
+  const totalSpanHours =
+    schedulableClips.length > 1
+      ? ((schedulableClips.length - 1) * safeGap).toFixed(1).replace(/\.0$/, "")
+      : "0";
+  const finalClip =
+    timelineItems.length > 0 ? timelineItems[timelineItems.length - 1] : null;
+
+  const hasQueuedClips = schedulableClips.some((c) =>
+    c.publications?.some((p) => p.state === "queued"),
+  );
+
+  async function handleScheduleAll() {
+    if (!schedulableClips.length) {
+      notify("No remaining clips to schedule. All rendered clips are already live.", true);
+      return;
+    }
+    setSubmitting(true);
+    try {
+      let start_time: number | undefined = undefined;
+      if (startMode === "custom" && customStartTime) {
+        start_time = Math.floor(new Date(customStartTime).getTime() / 1000);
+      }
+      const res = await api<ScheduleAllResult>(
+        `/jobs/${job.id}/schedule-all`,
+        "POST",
+        {
+          platform,
+          account,
+          gap_hours: safeGap,
+          publish_first_now: startMode === "now",
+          start_time,
+          privacy,
+        },
+      );
+      refresh();
+      setScheduleResult(res);
+      notify(res.message || `Scheduled ${res.count} clips successfully!`);
+    } catch (err) {
+      notify((err as Error).message, true);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleCancelAll() {
+    if (
+      !confirm(
+        "Are you sure you want to cancel all currently scheduled clips for this project?",
+      )
+    )
+      return;
+    setCancelling(true);
+    try {
+      const res = await api<{ ok: boolean; cancelled: number; message: string }>(
+        `/jobs/${job.id}/schedule/cancel-all`,
+        "POST",
+      );
+      refresh();
+      notify(res.message || "Scheduled campaign cancelled.");
+      setOpen(false);
+    } catch (err) {
+      notify((err as Error).message, true);
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={(v: boolean) => {
+        if (!submitting && !cancelling) setOpen(v);
+      }}
+      title="Schedule All Clips"
+      description={
+        skippedLiveClips.length > 0
+          ? `Queue ${schedulableClips.length} remaining clips for automated staggered publishing (${skippedLiveClips.length} already live on ${platform === "youtube" ? "YouTube" : "Instagram"} skipped).`
+          : `Queue all ${renderedClips.length} rendered moments for automated staggered publishing.`
+      }
+    >
+      {scheduleResult ? (
+        <div className="schedule-success-card">
+          <div className="schedule-success-icon-badge">
+            <CheckCircle2 size={40} color="#059669" />
+          </div>
+          <h3>Campaign Scheduled!</h3>
+          <p className="schedule-success-sub">
+            All <strong>{scheduleResult.count} clips</strong> have been queued
+            for release on{" "}
+            <strong>
+              {scheduleResult.channel_title || scheduleResult.account}
+            </strong>{" "}
+            with a <strong>{scheduleResult.gap_hours} hour interval</strong>.
+          </p>
+
+          {scheduleResult.platform === "youtube" && (
+            <div className="schedule-cloud-notice">
+              <Sparkles size={16} color="#0284c7" />
+              <span>
+                <strong>Uploaded &amp; Scheduled on YouTube Cloud:</strong> Clips are already uploaded to YouTube Studio with <code>publishAt</code> timestamps. YouTube will publish each Short automatically at its scheduled interval. You can close Cliper and turn off your PC safely.
+              </span>
+            </div>
+          )}
+
+          {scheduleResult.skipped_live_count && scheduleResult.skipped_live_count > 0 ? (
+            <div className="schedule-success-skipped-banner">
+              <CheckCheck size={14} color="#059669" />
+              <span>
+                {scheduleResult.skipped_live_count} live clip{scheduleResult.skipped_live_count > 1 ? "s were" : " was"} already live on {scheduleResult.platform === "youtube" ? "YouTube" : "Instagram"} and omitted.
+              </span>
+            </div>
+          ) : null}
+
+          <div className="schedule-success-timeline">
+            {scheduleResult.items.map((item, idx) => {
+              const d = new Date(item.due * 1000);
+              return (
+                <div key={item.publication_id} className="schedule-success-row">
+                  <span className="success-clip-idx">Clip #{item.clip_id}</span>
+                  <strong className="success-clip-title">{item.title}</strong>
+                  <span className="success-clip-due">
+                    {d.toLocaleDateString([], {
+                      month: "short",
+                      day: "numeric",
+                    })}{" "}
+                    at{" "}
+                    {d.toLocaleTimeString([], {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                  {item.url && (
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="schedule-item-yt-link"
+                      title="Open on YouTube"
+                    >
+                      <ExternalLink size={11} />
+                      Shorts
+                    </a>
+                  )}
+                  <span className="success-clip-badge">
+                    {idx === 0
+                      ? "First"
+                      : `+${(idx * scheduleResult.gap_hours).toFixed(1).replace(/\.0$/, "")}h`}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="success-actions">
+            <Button variant="primary" onClick={() => setOpen(false)}>
+              Done
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="schedule-modal-body">
+          {/* Platform Picker */}
+          <div className="publish-platform-picker">
+            <button
+              type="button"
+              className={`platform-pill ${platform === "youtube" ? "active yt" : ""}`}
+              onClick={() => setPlatform("youtube")}
+            >
+              <Youtube size={16} />
+              <span>YouTube Shorts</span>
+              {selectedYtAccount?.authorized && (
+                <span className="auth-dot" title="Authorized" />
+              )}
+            </button>
+            <button
+              type="button"
+              className={`platform-pill ${platform === "instagram" ? "active ig" : ""}`}
+              onClick={() => setPlatform("instagram")}
+            >
+              <Globe size={16} />
+              <span>Instagram Reels</span>
+            </button>
+          </div>
+
+          {/* Destination channel */}
+          {platform === "youtube" ? (
+            <div className="destination-account-card">
+              <Field
+                label="Target YouTube Channel"
+                hint={
+                  selectedYtAccount?.authorized
+                    ? `Connected: ${selectedYtAccount.title} (${selectedYtAccount.channel_id || "Active"})`
+                    : "Channel needs authorization in Settings."
+                }
+              >
+                <select
+                  value={account}
+                  onChange={(e) => {
+                    setAccount(e.target.value);
+                    const acc = ytAccounts.find(
+                      (a) => a.key === e.target.value,
+                    );
+                    if (acc?.privacy) setPrivacy(acc.privacy);
+                  }}
+                >
+                  {ytAccounts.map((a) => (
+                    <option key={a.key} value={a.key}>
+                      {a.title} ({a.key}){" "}
+                      {a.authorized ? "✓ Connected" : "⚠ Not connected"}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              {selectedYtAccount?.authorized ? (
+                <>
+                  <div className="channel-connected-banner">
+                    {selectedYtAccount.thumbnail ? (
+                      <img
+                        src={selectedYtAccount.thumbnail}
+                        alt={selectedYtAccount.title}
+                        className="channel-avatar"
+                      />
+                    ) : (
+                      <div className="channel-avatar-placeholder">
+                        <Youtube size={16} />
+                      </div>
+                    )}
+                    <div>
+                      <strong>{selectedYtAccount.title}</strong>
+                      <span>
+                        Direct YouTube-Side Scheduling (publishAt) · YouTube Cloud Releases
+                      </span>
+                    </div>
+                  </div>
+                  <div className="youtube-schedule-info-box">
+                    <Sparkles size={16} className="info-box-icon" />
+                    <div>
+                      <strong>YouTube-Side Cloud Scheduling (Not Local PC)</strong>
+                      <p>
+                        All {schedulableClips.length} rendered videos are uploaded directly to YouTube now with YouTube's native <code>publishAt</code> timer. YouTube's cloud servers publish each Short automatically at your {safeGap}h interval. You do NOT need to keep your PC on or keep Cliper open!
+                      </p>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="channel-warning-banner">
+                  <span>
+                    Channel '{account}' requires authorization. Please authorize
+                    it in Settings.
+                  </span>
+                  <Link
+                    to="/settings"
+                    className="text-link"
+                    onClick={() => setOpen(false)}
+                  >
+                    Go to Settings →
+                  </Link>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="destination-account-card">
+              <Field
+                label="Instagram Account"
+                hint="From config/instagram.json"
+              >
+                <input
+                  value={account}
+                  onChange={(e) => setAccount(e.target.value)}
+                  placeholder="e.g. clips, main"
+                />
+              </Field>
+            </div>
+          )}
+
+          {/* Gap Configuration */}
+          <div className="schedule-section-card">
+            <div className="schedule-section-header">
+              <div className="section-title-wrap">
+                <Clock3 size={16} className="section-icon" />
+                <div>
+                  <strong>Interval Between Clips (Gap)</strong>
+                  <span className="section-sub">
+                    Default is 2 hours. If 5 clips, every clip will be scheduled
+                    with a 2-hour spacing.
+                  </span>
+                </div>
+              </div>
+              <span className="gap-current-badge">{safeGap}h Gap</span>
+            </div>
+
+            <div className="gap-presets-bar">
+              {GAP_PRESETS.map((hrs) => (
+                <button
+                  key={hrs}
+                  type="button"
+                  className={`gap-preset-pill ${safeGap === hrs ? "active" : ""}`}
+                  onClick={() => setGapHours(hrs)}
+                >
+                  {hrs}h {hrs === 2 ? "(Default)" : ""}
+                </button>
+              ))}
+            </div>
+
+            <div className="gap-custom-input-row">
+              <label htmlFor="custom-gap-input">Custom interval (hours):</label>
+              <div className="gap-input-wrap">
+                <input
+                  id="custom-gap-input"
+                  type="number"
+                  min="0.1"
+                  max="168"
+                  step="0.5"
+                  value={gapHours}
+                  onChange={(e) =>
+                    setGapHours(Math.max(0.1, Number(e.target.value) || 2.0))
+                  }
+                />
+                <span className="gap-unit">hours</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Start Timing Options */}
+          <div className="schedule-section-card">
+            <div className="schedule-section-header">
+              <div className="section-title-wrap">
+                <Calendar size={16} className="section-icon" />
+                <div>
+                  <strong>Start Timing</strong>
+                  <span className="section-sub">
+                    Choose when the first clip should be published.
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="timing-options-grid">
+              <label
+                className={`timing-option-card ${startMode === "now" ? "selected" : ""}`}
+              >
+                <input
+                  type="radio"
+                  name="startMode"
+                  value="now"
+                  checked={startMode === "now"}
+                  onChange={() => setStartMode("now")}
+                />
+                <div>
+                  <strong>Publish 1st clip now</strong>
+                  <span>
+                    Clip #1 goes live immediately, subsequent clips every{" "}
+                    {safeGap}h
+                  </span>
+                </div>
+              </label>
+
+              <label
+                className={`timing-option-card ${startMode === "custom" ? "selected" : ""}`}
+              >
+                <input
+                  type="radio"
+                  name="startMode"
+                  value="custom"
+                  checked={startMode === "custom"}
+                  onChange={() => setStartMode("custom")}
+                />
+                <div>
+                  <strong>Schedule start date & time</strong>
+                  <span>
+                    First clip starts at chosen time, following clips every{" "}
+                    {safeGap}h
+                  </span>
+                </div>
+              </label>
+            </div>
+
+            {startMode === "custom" && (
+              <div className="custom-datetime-wrap">
+                <Field
+                  label="Campaign Start Date & Time"
+                  hint="Local system time"
+                >
+                  <input
+                    type="datetime-local"
+                    value={customStartTime}
+                    onChange={(e) => setCustomStartTime(e.target.value)}
+                  />
+                </Field>
+              </div>
+            )}
+          </div>
+
+          {/* Privacy Visibility for YouTube */}
+          {platform === "youtube" && (
+            <Field label="YouTube Privacy Visibility">
+              <select
+                value={privacy}
+                onChange={(e) => setPrivacy(e.target.value)}
+              >
+                <option value="public">Public (Immediate subscriber reach)</option>
+                <option value="unlisted">Unlisted (Shareable link only)</option>
+                <option value="private">Private (Draft)</option>
+              </select>
+            </Field>
+          )}
+
+          {/* Skip banner for already live clips */}
+          {skippedLiveClips.length > 0 && schedulableClips.length > 0 && (
+            <div className="schedule-live-skip-banner">
+              <div className="skip-banner-header">
+                <CheckCheck size={16} className="skip-banner-icon" />
+                <div>
+                  <strong>
+                    {skippedLiveClips.length} clip{skippedLiveClips.length > 1 ? "s" : ""} already live on {platform === "youtube" ? "YouTube" : "Instagram"} will be skipped
+                  </strong>
+                  <p className="skip-banner-sub">
+                    Already published clips are automatically omitted from scheduling to prevent duplicate posts.
+                  </p>
+                </div>
+              </div>
+              <div className="skip-clips-tags">
+                {skippedLiveClips.map((c) => (
+                  <span
+                    key={c.id}
+                    className="skip-clip-pill"
+                    title={`Clip #${c.id} is already live`}
+                  >
+                    <span className="live-dot" /> Clip #{c.id}: {c.title || `Moment ${c.id}`}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {schedulableClips.length === 0 ? (
+            <div className="all-live-notice-card">
+              <div className="all-live-icon-wrap">
+                <CheckCircle2 size={36} color="#059669" />
+              </div>
+              <h3>All {renderedClips.length} clips are already live!</h3>
+              <p>
+                Every rendered clip in this project has already been published to{" "}
+                <strong>{platform === "youtube" ? "YouTube Shorts" : "Instagram Reels"}</strong>.
+                There are no remaining clips to schedule.
+              </p>
+              <div className="all-live-clips-list">
+                {skippedLiveClips.map((c) => (
+                  <div key={c.id} className="all-live-clip-row">
+                    <span className="live-dot" />
+                    <strong>Clip #{c.id}</strong>
+                    <span>{c.title || `Moment ${c.id}`}</span>
+                    <span className="live-status-pill">Live</span>
+                  </div>
+                ))}
+              </div>
+              <div className="modal-footer schedule-footer">
+                <Button variant="primary" onClick={() => setOpen(false)}>
+                  Done
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Live Campaign Timeline Preview Matrix */}
+              <div className="schedule-timeline-preview">
+                <div className="timeline-preview-header">
+                  <div className="timeline-title">
+                    <ListOrdered size={15} />
+                    <strong>
+                      Campaign Timeline Preview ({schedulableClips.length} Clips)
+                    </strong>
+                  </div>
+                  <span className="timeline-gap-pill">
+                    Gap: {safeGap}h between clips
+                  </span>
+                </div>
+
+                <div className="timeline-items-list">
+                  {timelineItems.map((item, idx) => (
+                    <div key={item.clip.id} className="timeline-item-card">
+                      <div className="timeline-item-left">
+                        <span className="timeline-step-num">#{idx + 1}</span>
+                        <div className="timeline-item-info">
+                          <span className="timeline-item-title">
+                            {item.clip.title || `Clip #${item.clip.id}`}
+                          </span>
+                          <small className="timeline-item-dur">
+                            {Math.round(item.clip.end - item.clip.start)}s · Score{" "}
+                            {item.clip.score}/100
+                          </small>
+                        </div>
+                      </div>
+                      <div className="timeline-item-right">
+                        <span className="timeline-offset-pill">
+                          {item.offsetLabel}
+                        </span>
+                        <div className="timeline-time-info">
+                          <strong>{item.timeFormatted}</strong>
+                          <small>{item.dateFormatted}</small>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="schedule-summary-banner">
+                  <Sparkles size={16} />
+                  <span>
+                    Total <strong>{schedulableClips.length} clips</strong> scheduled
+                    across <strong>{totalSpanHours} hours</strong>, finishing on{" "}
+                    <strong>
+                      {finalClip?.dateFormatted} at {finalClip?.timeFormatted}
+                    </strong>
+                    .
+                  </span>
+                </div>
+              </div>
+
+              {/* Footer Actions */}
+              <div className="modal-footer schedule-footer">
+                {hasQueuedClips && (
+                  <Button
+                    variant="danger"
+                    busy={cancelling}
+                    disabled={submitting}
+                    onClick={() => void handleCancelAll()}
+                  >
+                    Cancel existing schedule
+                  </Button>
+                )}
+                <div className="footer-right-actions">
+                  <Button
+                    variant="ghost"
+                    onClick={() => setOpen(false)}
+                    disabled={submitting || cancelling}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    icon={CalendarClock}
+                    busy={submitting}
+                    disabled={
+                      submitting ||
+                      cancelling ||
+                      !schedulableClips.length ||
+                      (platform === "youtube" && !selectedYtAccount?.authorized)
+                    }
+                    onClick={() => void handleScheduleAll()}
+                  >
+                    {submitting
+                      ? "Scheduling Clips..."
+                      : `Schedule All (${schedulableClips.length} Clips)`}
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </Modal>
+  );
+}

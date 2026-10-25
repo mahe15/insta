@@ -109,6 +109,7 @@ async def transcribe(source: Path, directory: Path, prefs: Preferences, cfg: Con
 
 
 def filter_graph(prefs: Preferences, face: dict, subtitle: str, force_blur=False, zoom=None, hdr=False) -> tuple[str, str]:
+    face = face or {}
     w, h = prefs.width, prefs.width * 16 // 9
     mode = prefs.reframe
     geometry = layout(prefs, face, force_blur)
@@ -224,18 +225,39 @@ async def render(source: Path, directory: Path, transcript: Transcript, clip: Cl
     if prefs.editorial_profile == "ishowspeed" and clip.moment_type in {"challenge", "football"}:
         face["square_mode"] = "fit"
     length = clip.end - clip.start
-    from .music import choose
+    from .music import choose, resolve_track, resolve_category_folder
     track_note = directory / f"clip_{clip.id:02}.music.json"
     track = None
     if prefs.music:
+        req_track = getattr(prefs, "music_track", None)
+        req_folder = getattr(prefs, "music_folder", None) or getattr(prefs, "music_override", None)
+        target_category = req_folder or clip.music_category
+
         if track_note.exists():
-            saved = json.loads(track_note.read_text("utf-8"))
-            candidate = Path(saved["path"]) if saved.get("path") else None
-            if candidate and candidate.is_file() and saved.get("category") == clip.music_category:
-                track = candidate
+            try:
+                saved = json.loads(track_note.read_text("utf-8"))
+                candidate = Path(saved["path"]) if saved.get("path") else None
+                if candidate and candidate.is_file():
+                    if req_track:
+                        if candidate.name.lower() == Path(req_track).name.lower():
+                            track = candidate
+                    elif req_folder:
+                        if saved.get("category") == req_folder:
+                            track = candidate
+                    elif saved.get("category") == clip.music_category:
+                        track = candidate
+            except Exception:
+                pass
+
         if track is None:
-            track = choose(cfg.music_dir, clip.music_category)
-        write_json(track_note, {"category": clip.music_category, "path": str(track) if track else None,
+            if req_track:
+                track = resolve_track(cfg.music_dir, req_track)
+            if track is None and req_folder:
+                track = choose(cfg.music_dir, req_folder)
+            if track is None:
+                track = choose(cfg.music_dir, target_category)
+
+        write_json(track_note, {"category": target_category, "path": str(track) if track else None,
                                 "gain": prefs.music_gain, "status": "selected" if track else "category folder is empty"})
     # Limit peak video bitrate with ample mux/audio headroom for Telegram's cloud API.
     bitrate = (min(6500, int((43_000_000 * 8 / length) / 1000) - 192) if prefs.export_quality == "compact"

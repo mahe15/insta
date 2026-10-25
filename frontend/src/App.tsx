@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   NavLink,
   Route,
@@ -13,7 +13,9 @@ import {
   Check,
   ChevronDown,
   Command,
+  Disc,
   Film,
+  Folder,
   FolderOpen,
   HelpCircle,
   Images,
@@ -21,22 +23,27 @@ import {
   Link2,
   LockKeyhole,
   Menu,
+  Play,
   Plus,
   Search,
   Send,
   Settings2,
+  Sparkles,
+  Square,
   Upload,
+  Volume2,
   X,
   Zap,
 } from "lucide-react";
 import { api, setCsrf, upload, providerName } from "./api";
-import type { Bootstrap, Job, System } from "./types";
+import type { Bootstrap, Job, Music as MusicCategory, System } from "./types";
 import {
   Button,
   Field,
   IconButton,
   Modal,
   StudioContext,
+  Switch,
   useStudio,
 } from "./ui";
 import Speed from "./Speed";
@@ -498,6 +505,51 @@ function NewProject({
     [busy, setBusy] = useState(false),
     [file, setFile] = useState<File | null>(null),
     [error, setError] = useState("");
+
+  const musicQuery = useQuery({
+    queryKey: ["music"],
+    queryFn: () => api<MusicCategory[]>("/music"),
+    enabled: open,
+  });
+  const musicCategories = musicQuery.data || [];
+
+  const [musicEnabled, setMusicEnabled] = useState(boot.preferences.music ?? true);
+  const [musicMode, setMusicMode] = useState<"default" | "folder" | "song">("default");
+  const [musicFolder, setMusicFolder] = useState<string>("");
+  const [musicTrack, setMusicTrack] = useState<string>("");
+  const [musicGain, setMusicGain] = useState<number>(boot.preferences.music_gain ?? 0.5);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  function stopAudio() {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+    }
+    setPreviewUrl(null);
+  }
+
+  function togglePreview(url: string) {
+    if (previewUrl === url) {
+      stopAudio();
+    } else {
+      if (!audioRef.current) {
+        audioRef.current = new Audio();
+        audioRef.current.onended = () => setPreviewUrl(null);
+      }
+      audioRef.current.src = url;
+      audioRef.current.volume = Math.max(0, Math.min(1, musicGain));
+      void audioRef.current.play().catch(() => {});
+      setPreviewUrl(url);
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      stopAudio();
+    };
+  }, []);
+
   useEffect(() => {
     if (open) {
       setUrl(initialUrl);
@@ -508,17 +560,41 @@ function NewProject({
       setError("");
       setFile(null);
       setFocus(boot.preferences.focus_times.map((v) => String(v)).join(" "));
+      setMusicEnabled(boot.preferences.music ?? true);
+      setMusicMode("default");
+      setMusicFolder("");
+      setMusicTrack("");
+      setMusicGain(boot.preferences.music_gain ?? 0.5);
+      stopAudio();
+    } else {
+      stopAudio();
     }
   }, [open, initialUrl]);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError("");
+    stopAudio();
     try {
       let result: Job;
+      const musicPrefs = {
+        music: musicEnabled,
+        music_gain: musicGain,
+        music_folder: musicEnabled && musicMode === "folder" ? (musicFolder || null) : null,
+        music_override: musicEnabled && musicMode === "folder" ? (musicFolder || null) : null,
+        music_track: musicEnabled && musicMode === "song" ? (musicTrack || null) : null,
+      };
+
       if (tab === "upload") {
         if (!file) throw new Error("Choose a video file first.");
-        result = (await upload("/jobs/upload", file, rules)) as unknown as Job;
+        result = (await upload("/jobs/upload", file, {
+          clipping_mode: "audio_first",
+          scan_minutes: scan,
+          clips,
+          ...musicPrefs,
+          ...rules,
+        })) as unknown as Job;
       } else {
         const focusTimes = focus.trim()
           ? focus
@@ -544,6 +620,7 @@ function NewProject({
             scan_minutes: scan,
             clips,
             focus_times: focusTimes,
+            ...musicPrefs,
             ...rules,
           },
         });
@@ -558,11 +635,15 @@ function NewProject({
       setBusy(false);
     }
   }
+
   return (
     <Modal
       open={open}
       onOpenChange={(v) => {
-        if (!busy) setOpen(v);
+        if (!busy) {
+          if (!v) stopAudio();
+          setOpen(v);
+        }
       }}
       title="Start with a good source."
       description="Bring a video. We'll help you find the moments worth sharing."
@@ -668,6 +749,219 @@ function NewProject({
             />
           </label>
         )}
+
+        {/* Music and Folder Selection */}
+        <div className="project-music-picker">
+          <div className="project-music-header">
+            <span className="project-music-title">
+              <AudioLines size={16} />
+              <span>Background Music</span>
+            </span>
+            <Switch
+              label="Enable music"
+              checked={musicEnabled}
+              onChange={setMusicEnabled}
+            />
+          </div>
+
+          {musicEnabled && (
+            <>
+              <div className="music-mode-tabs" role="tablist">
+                <button
+                  type="button"
+                  className={musicMode === "default" ? "chosen" : ""}
+                  onClick={() => {
+                    setMusicMode("default");
+                    setMusicFolder("");
+                    setMusicTrack("");
+                  }}
+                >
+                  <Sparkles size={13} />
+                  Default (AI Moods)
+                </button>
+                <button
+                  type="button"
+                  className={musicMode === "folder" ? "chosen" : ""}
+                  onClick={() => {
+                    setMusicMode("folder");
+                    setMusicTrack("");
+                    if (!musicFolder && musicCategories.length > 0) {
+                      setMusicFolder(musicCategories[0].id);
+                    }
+                  }}
+                >
+                  <Folder size={13} />
+                  Choose Folder
+                </button>
+                <button
+                  type="button"
+                  className={musicMode === "song" ? "chosen" : ""}
+                  onClick={() => {
+                    setMusicMode("song");
+                    setMusicFolder("");
+                    if (!musicTrack) {
+                      const first = musicCategories.flatMap((c) => c.tracks)[0];
+                      if (first) setMusicTrack(first.name);
+                    }
+                  }}
+                >
+                  <Disc size={13} />
+                  Choose Any Song
+                </button>
+              </div>
+
+              {musicMode === "default" && (
+                <div className="info-note">
+                  <Sparkles size={14} />
+                  <span>
+                    <strong>Default library active:</strong> Clips automatically select matching moods
+                    (Chill, Phonk, Cinematic, Hype, Sad, Suspense) from the <code>@music</code> folder.
+                    Sound volume is set to <strong>{Math.round(musicGain * 100)}%</strong>.
+                  </span>
+                </div>
+              )}
+
+              {musicMode === "folder" && (
+                <div className="music-folder-selection">
+                  <Field
+                    label="Choose folder from @music library"
+                    hint="All clips will randomly pick from this folder. Choose Chill, Phonk, Cinematic, etc."
+                  >
+                    <div className="music-folders-grid">
+                      {musicCategories.map((c) => {
+                        const isSelected = musicFolder === c.id;
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            className={`music-folder-chip ${isSelected ? "selected" : ""}`}
+                            onClick={() => setMusicFolder(c.id)}
+                          >
+                            <strong>
+                              <span>{c.name.replace(" - ", " / ")}</span>
+                              {isSelected && <Check size={13} />}
+                            </strong>
+                            <small>{c.tracks.length} tracks</small>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </Field>
+                </div>
+              )}
+
+              {musicMode === "song" && (
+                <div className="music-song-picker-row">
+                  <Field
+                    label="Select any song from @music"
+                    hint="Every clip in this project will use this soundtrack."
+                  >
+                    <select
+                      value={musicTrack}
+                      onChange={(e) => setMusicTrack(e.target.value)}
+                    >
+                      <option value="">-- Choose any song --</option>
+                      {musicCategories.map((cat) => (
+                        <optgroup key={cat.id} label={`${cat.name} (${cat.tracks.length} tracks)`}>
+                          {cat.tracks.map((t) => (
+                            <option key={t.name} value={t.name}>
+                              {t.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  </Field>
+
+                  {(() => {
+                    const currentTrackObj = musicCategories
+                      .flatMap((c) => c.tracks.map((t) => ({ ...t, catName: c.name })))
+                      .find((t) => t.name === musicTrack);
+
+                    if (!currentTrackObj) return null;
+
+                    const isPlaying = previewUrl === currentTrackObj.url;
+
+                    return (
+                      <div className="music-song-preview-card">
+                        <div className="music-song-info">
+                          <Disc size={15} />
+                          <div>
+                            <strong>{currentTrackObj.name}</strong>
+                            <small className="muted" style={{ display: "block" }}>
+                              {currentTrackObj.catName} · {(currentTrackObj.bytes / (1024 * 1024)).toFixed(1)} MB
+                            </small>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className={`music-preview-btn ${isPlaying ? "playing" : ""}`}
+                          onClick={() => togglePreview(currentTrackObj.url)}
+                        >
+                          {isPlaying ? <Square size={13} /> : <Play size={13} />}
+                          {isPlaying ? "Stop" : "Preview"}
+                        </button>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              <Field
+                label={`Music sound level · ${Math.round(musicGain * 100)}%`}
+                hint="Linear gain beneath speech; speech ducking dynamically protects voice intelligibility."
+              >
+                <div className="range-field">
+                  <span>0%</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={musicGain}
+                    onChange={(e) => {
+                      const val = +e.target.value;
+                      setMusicGain(val);
+                      if (audioRef.current) audioRef.current.volume = val;
+                    }}
+                  />
+                  <span>100%</span>
+                </div>
+                <div className="volume-quick-btns">
+                  <button
+                    type="button"
+                    className={Math.round(musicGain * 100) === 25 ? "active" : ""}
+                    onClick={() => setMusicGain(0.25)}
+                  >
+                    Quiet 25%
+                  </button>
+                  <button
+                    type="button"
+                    className={Math.round(musicGain * 100) === 50 ? "active" : ""}
+                    onClick={() => setMusicGain(0.50)}
+                  >
+                    Default 50%
+                  </button>
+                  <button
+                    type="button"
+                    className={Math.round(musicGain * 100) === 75 ? "active" : ""}
+                    onClick={() => setMusicGain(0.75)}
+                  >
+                    Loud 75%
+                  </button>
+                  <button
+                    type="button"
+                    className={Math.round(musicGain * 100) === 100 ? "active" : ""}
+                    onClick={() => setMusicGain(1.0)}
+                  >
+                    Max 100%
+                  </button>
+                </div>
+              </Field>
+            </>
+          )}
+        </div>
+
         <ProjectRules value={rules} onChange={setRules} />
         <div className="project-summary">
           <span>
@@ -689,7 +983,10 @@ function NewProject({
           <Button
             type="button"
             variant="ghost"
-            onClick={() => setOpen(false)}
+            onClick={() => {
+              stopAudio();
+              setOpen(false);
+            }}
             disabled={busy}
           >
             Cancel

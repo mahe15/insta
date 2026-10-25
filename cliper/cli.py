@@ -215,7 +215,8 @@ def main():
     sub.add_parser("gemini-login", help="Verify Gemini in the configured shared browser session")
     sub.add_parser("x-login", help="Sign in to X in the existing shared Chromium profile")
     yt_auth = sub.add_parser("youtube-auth", help="Authorize a YouTube account using OAuth in your local browser")
-    yt_auth.add_argument("--account", default="main", help="Account identifier key in config/youtube.json (e.g. main, gaming, shorts)")
+    yt_auth.add_argument("--account", default=None, help="Account identifier key in config/youtube.json (e.g. main, podcast, gaming)")
+    yt_auth.add_argument("--list", action="store_true", help="List all configured YouTube accounts and exit")
     server = sub.add_parser("serve-media", help="Serve only staged Instagram media behind your HTTPS reverse proxy")
     server.add_argument("--host", default="127.0.0.1")
     server.add_argument("--port", type=int, default=8787)
@@ -267,8 +268,38 @@ def main():
             asyncio.run(login(cfg))
             return
         if args.command == "youtube-auth":
-            from .youtube_publishing import run_cli_auth
-            asyncio.run(run_cli_auth(args.account, cfg))
+            from .youtube_publishing import run_cli_auth, list_accounts_cli, suggest_next_account_key, get_youtube_config, get_token_path
+            if getattr(args, "list", False):
+                list_accounts_cli()
+                return
+            account_to_auth = args.account
+            if not account_to_auth:
+                list_accounts_cli()
+                suggested = suggest_next_account_key()
+                print(f"No --account specified. Next suggested account key: '{suggested}'")
+                try:
+                    user_input = input(f"Enter account key to authorize [press Enter for '{suggested}']: ").strip()
+                    account_to_auth = user_input if user_input else suggested
+                except (EOFError, KeyboardInterrupt):
+                    print("\nAborted.")
+                    return
+            account_to_auth = account_to_auth.lower().strip()
+            # Safety check if overwriting an existing authorized account
+            token_path = get_token_path(account_to_auth)
+            if token_path.is_file():
+                yt_cfg = get_youtube_config()
+                acc_info = yt_cfg.get("accounts", {}).get(account_to_auth, {})
+                acc_title = acc_info.get("title", account_to_auth)
+                print(f"\n[!] Notice: Account '{account_to_auth}' is already connected to channel '{acc_title}'.")
+                try:
+                    confirm = input("    Do you want to re-authenticate and overwrite this account? [y/N]: ").strip().lower()
+                    if confirm != "y":
+                        print("Operation cancelled. Existing account was NOT modified.")
+                        return
+                except (EOFError, KeyboardInterrupt):
+                    print("\nAborted.")
+                    return
+            asyncio.run(run_cli_auth(account_to_auth, cfg))
             return
         if args.command == "serve-media":
             from .public_media import serve

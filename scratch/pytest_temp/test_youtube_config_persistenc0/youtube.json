@@ -1,0 +1,19 @@
+{
+  "client_id": "test-client-id",
+  "client_secret": "test-client-secret",
+  "accounts": {
+    "gaming": {
+      "title": "Gaming Shorts",
+      "channel_id": "UC12345",
+      "privacy": "public",
+      "default_tags": [
+        "gaming",
+        "shorts"
+      ],
+      "auto_publish": true,
+      "owners": [
+        0
+      ]
+    }
+  }
+}

@@ -63,9 +63,10 @@ Both halves must feature the SAME CHARACTER from the reference image in DIFFEREN
 
 === RULE 2: CHARACTER IDENTITY & CONSISTENCY ===
 The attached image is the CHARACTER REFERENCE for our single original protagonist.
-Preserve exact same face, hairstyle, body proportions and identity in BOTH halves of this image and across all slides.
+Preserve exact same face, hairstyle, muscular athletic body proportions and identity across every slide.
+The protagonist is an anime-inspired, muscular/athletic male character wearing sleek dark clothing with subtle red accents,
+with a serious, disciplined, focused expression. Do not change his facial features, build or identity between the two halves.
 The protagonist appears in the top scene AND the bottom scene — same person, different situation.
-Do not change his facial features, build or identity between the two halves.
 
 === RULE 3: TEXT ON EACH HALF ===
 Each half has its OWN short bold text line (2–5 words) rendered directly over the scene.
@@ -75,13 +76,14 @@ The top-half text and bottom-half text form a CONTRASTING PAIR:
 
 === RULE 4: TYPOGRAPHY & COLOUR ===
 - FONT: Bold, heavy modern sans-serif (thick block weight similar to Montserrat ExtraBold, Anton, or Bebas Neue). Clean, crisp, high mobile readability. NEVER use decorative, cursive, thin, or handwritten fonts.
-- FONT SIZE: Large, bold, dominant within each half. Main text approx 8–12% of each half's height. Never small.
+- FONT SIZE: Large, bold, dominant within each half. Main text approx 8–12% of each half's height (108–162px); secondary text approx 6–9% of each half's height (80–120px). Never small.
 - TEXT COLOUR: Strict two-tone: Main words in solid crisp WHITE; important keywords/numbers in vibrant bold RED or ORANGE. High contrast against background.
+- TEXT LENGTH: Ultra-concise (target 3–8 words total, prefer 1 line, maximum 2 short lines). NEVER put paragraphs or text blocks on the image.
 - TEXT PLACEMENT: Centre-bottom area of each half, over the scene but not covering the character's face.
 
 === RULE 5: VISUAL CONTRAST BETWEEN HALVES ===
 Visual progression (Slide {index}/{total}): {arc_note}
-- TOP HALF: Darker, cooler, moodier atmosphere. Character in a challenging, uncomfortable, or starting situation.
+- TOP HALF: darker, cooler, moodier atmosphere. Character in a challenging, uncomfortable, or starting situation.
 - BOTTOM HALF: Warmer, brighter, more energetic atmosphere. Character in a rewarding, confident, or successful situation.
 The contrast between the two halves should tell the story VISUALLY without needing to read text.
 
@@ -89,6 +91,7 @@ The contrast between the two halves should tell the story VISUALLY without needi
 Exact 1080x1350 portrait (4:5 format) total canvas, split into two ~1080×675 halves.
 Character occupies a major portion of each half (cinematic medium shot in each scene).
 Keep the character's face and key action unobstructed in both halves.
+Place text in a quiet high-contrast negative space zone with minimum 100px side/top margins and 150px bottom margin.
 {swipe_note}
 
 === RULE 7: OVERALL STYLE ===
@@ -96,6 +99,9 @@ Premium cinematic anime illustration, sharp anatomy, realistic perspective, deta
 Dramatic cinematic lighting with strong shadows and rim highlights. Each half is a complete cinematic scene.
 Frame must look like a high-budget cinematic anime movie frame, NOT a generic AI poster.
 Strictly NO watermarks, logos, decorative borders, icons, badge graphics, or UI elements.
+
+=== RULE 10: THE GOLDEN RULE - SIMPLICITY ===
+- THE GOLDEN RULE: ONE IDEA PER SLIDE. Instant 1–2 second comprehension. Prioritize: HOOK → NUMBER → VISUAL → EMOTION. NEVER: LONG TEXT → SMALL FONT → CLUTTERED IMAGE.
 
 Slide {index}/{total}. Full narrative context: {context_json}
 

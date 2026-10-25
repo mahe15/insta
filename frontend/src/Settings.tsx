@@ -348,12 +348,12 @@ export default function Settings() {
                     <input
                       type="range"
                       min="0"
-                      max="0.3"
+                      max="1"
                       step="0.01"
                       value={draft.music_gain}
                       onChange={(e) => set("music_gain", +e.target.value)}
                     />
-                    <span>30%</span>
+                    <span>100%</span>
                   </div>
                 </Field>
                 {toggle(

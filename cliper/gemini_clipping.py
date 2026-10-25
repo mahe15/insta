@@ -14,7 +14,7 @@ from typing import Literal
 from urllib.parse import parse_qs, urlsplit
 
 import json_repair
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from .browser_provider import BrowserProviderError
 from .creative import text_matches
@@ -118,7 +118,7 @@ def sanitize_gemini_moment(m: dict) -> dict:
     clean["transcript"] = transcript[:8000]
 
     cat = str(m.get("music_category", "chill_ambient")).strip()
-    valid_cats = {"cinematic_epic", "emotional_sad", "suspense_thriller", "energetic_hype", "chill_ambient"}
+    valid_cats = {"cinematic_epic", "emotional_sad", "suspense_thriller", "energetic_hype", "chill_ambient", "phonk"}
     clean["music_category"] = cat if cat in valid_cats else "chill_ambient"
     clean["caption"] = str(m.get("caption", ""))[:1800]
     hashtags = m.get("hashtags", [])
@@ -205,6 +205,13 @@ class VideoMoment(Model):
     caption: str = Field(default="", max_length=1800)
     hashtags: list[str] = Field(default_factory=list, max_length=5)
     audience_value: str = Field(default="", max_length=300)
+
+    @field_validator("music_category")
+    @classmethod
+    def _validate_music_category(cls, v: str) -> str:
+        if not v or ".." in v or "/" in v or "\\" in v:
+            raise ValueError("Invalid music category path")
+        return v
 
 
 class VideoResult(Model):

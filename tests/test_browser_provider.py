@@ -22,11 +22,12 @@ def test_strict_browser_json():
     assert parse_result(result_json(), "abc", ContextResult).summary == "A complete summary"
     assert parse_result("```json\n" + result_json() + "\n```", "abc", ContextResult).summary
     assert parse_result("JSON\n<escape>" + result_json() + "</escape>", "abc", ContextResult).summary
+    assert parse_result("Here is your JSON:\n" + result_json(), "abc", ContextResult).summary == "A complete summary"
+    assert parse_result("Writing\n\n" + result_json() + "\n\nHope this helps!", "abc", ContextResult).summary == "A complete summary"
 
 
 @pytest.mark.parametrize("raw", [
     result_json("stale"), '{"request_id":"abc","result":',
-    "Here is your JSON: " + result_json(),
     result_json() + result_json(),
     '{"request_id":"abc","request_id":"abc","result":{"summary":"hello"}}',
     '{"request_id":"abc","result":{"summary":123}}',
@@ -174,6 +175,87 @@ async def test_real_chromium_waits_for_completed_turn_and_ignores_old_reply(cfg,
             await browser.close()
 
 
+async def test_real_chromium_modern_prosemirror_and_turn_dom(cfg):
+    playwright = pytest.importorskip("playwright.async_api")
+    async with playwright.async_playwright() as pw:
+        if not Path(pw.chromium.executable_path).exists():
+            pytest.skip("Optional Chromium integration test requires playwright install chromium")
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content('''
+                <div class="ProseMirror" contenteditable="true" aria-label="Ask ChatGPT" role="textbox"></div>
+                <button aria-label="Open profile menu">Profile</button>
+                <button type="submit" aria-label="Send">Send</button>
+            ''')
+            client = BrowserEditorialClient(cfg)
+            assert await client.signed_in(page)
+            await page.evaluate('''() => {
+                const turn = document.createElement('div');
+                turn.className = 'group flex flex-col';
+                turn.setAttribute('data-talvt-turn-state', 'complete');
+                turn.innerHTML = `
+                    <div data-chatgpt-search-unit-key="fallback-turn-0:1:assistant">
+                        <h4 data-conversation-role="assistant">ChatGPT said:</h4>
+                        <div data-markdown-text-style="assistant-message" class="MarkdownRoot">
+                            <p>${JSON.stringify({request_id: 'xyz', result: {summary: 'modern success'}})}</p>
+                        </div>
+                    </div>
+                    <div class="turn-action-controls">
+                        <button aria-label="Copy">Copy</button>
+                    </div>
+                `;
+                document.body.appendChild(turn);
+            }''')
+            raw = await client.wait_reply(page, before=0)
+            assert parse_result(raw, "xyz", ContextResult).summary == "modern success"
+        finally:
+            await browser.close()
+
+
+async def test_real_chromium_code_box_with_copy_code_button(cfg):
+    playwright = pytest.importorskip("playwright.async_api")
+    async with playwright.async_playwright() as pw:
+        if not Path(pw.chromium.executable_path).exists():
+            pytest.skip("Optional Chromium integration test requires playwright install chromium")
+        browser = await pw.chromium.launch(headless=True)
+        try:
+            page = await browser.new_page()
+            await page.set_content('''
+                <div class="ProseMirror" contenteditable="true" aria-label="Ask ChatGPT" role="textbox"></div>
+                <button type="submit" aria-label="Send">Send</button>
+            ''')
+            client = BrowserEditorialClient(cfg)
+            # Signed in should be True even without user menu when composer is visible and login is not visible
+            assert await client.signed_in(page)
+
+            await page.evaluate('''() => {
+                const turn = document.createElement('div');
+                turn.className = 'group flex flex-col';
+                turn.setAttribute('data-content-search-unit-key', 'fallback-turn-0:1:assistant');
+                turn.innerHTML = `
+                    <div data-markdown-text-style="assistant-message" class="MarkdownRoot">
+                        <div class="CodeBlock">
+                            <div class="flex items-center justify-between">
+                                <span>json</span>
+                                <button type="button" aria-label="Copy code">Copy code</button>
+                            </div>
+                            <div class="InlineCodePane">
+                                <pre><code>${JSON.stringify({request_id: 'code123', result: {summary: 'code box extracted'}})}</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(turn);
+            }''')
+            raw = await client.wait_reply(page, before=0)
+            assert parse_result(raw, "code123", ContextResult).summary == "code box extracted"
+        finally:
+            await browser.close()
+
+
+
+
 def test_parse_result_proposals_resilient_to_long_strings_and_ratings():
     raw = json.dumps({
         "request_id": "test_req",
@@ -214,3 +296,11 @@ def test_parse_result_context_result_long_summary():
     raw = json.dumps({"request_id": "summary_req", "result": {"summary": long_text}})
     result = parse_result(raw, "summary_req", ContextResult)
     assert len(result.summary) > 10000
+
+
+def test_parse_result_chatgpt_real_raw_recovery():
+    path = Path("data/logs/chatgpt_last_failed_raw.txt")
+    if path.exists():
+        raw = path.read_text(encoding="utf-8")
+        proposals = parse_result(raw, "197f612ccf1b4da3bd6204fa89f10af7", Proposals)
+        assert len(proposals.clips) == 6

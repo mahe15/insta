@@ -147,5 +147,16 @@ class Store:
 
 def write_json(path: Path, value):
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(path)
+    text = json.dumps(value, ensure_ascii=False, indent=2)
+    tmp.write_text(text, encoding="utf-8")
+    for attempt in range(5):
+        try:
+            tmp.replace(path)
+            return
+        except PermissionError:
+            time.sleep(0.05 * (attempt + 1))
+    path.write_text(text, encoding="utf-8")
+    try:
+        tmp.unlink(missing_ok=True)
+    except Exception:
+        pass

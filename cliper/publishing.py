@@ -50,13 +50,17 @@ class PublishStore:
                 db.execute("ALTER TABLE publications ADD COLUMN platform TEXT NOT NULL DEFAULT 'instagram'")
 
     def add(self, owner, chat, origin, feature, account, paths, caption, hashtags, *, auto=False,
-            predecessor=None, gap=0, due=None, niche=None, review_note="", platform="instagram"):
+            predecessor=None, gap=0, due=None, niche=None, review_note="", platform="instagram",
+            extra_payload: dict | None = None):
         identity = uuid.uuid4().hex[:12]
-        payload = json.dumps({"paths": [str(Path(p).resolve()) for p in paths],
-                              "caption": caption_text(caption, hashtags), "automatic": auto, "niche": niche,
-                              "review_note": review_note,
-                              "platform": platform,
-                              "asset_hashes": [asset_hash(p) if Path(p).is_file() else None for p in paths]})
+        payload_dict = {"paths": [str(Path(p).resolve()) for p in paths],
+                        "caption": caption_text(caption, hashtags), "automatic": auto, "niche": niche,
+                        "review_note": review_note,
+                        "platform": platform,
+                        "asset_hashes": [asset_hash(p) if Path(p).is_file() else None for p in paths]}
+        if extra_payload:
+            payload_dict.update(extra_payload)
+        payload = json.dumps(payload_dict)
         with self.store.connect() as db:
             db.execute("INSERT OR IGNORE INTO publications (id,owner,chat,origin,feature,account,state,due,"
                        "predecessor,gap,payload,created,platform) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -64,6 +68,14 @@ class PublishStore:
                         due if due is not None else time.time(), predecessor, gap, payload, time.time(), platform))
             row = db.execute("SELECT id FROM publications WHERE owner=? AND origin=?", (owner, origin)).fetchone()
         return self.get(row[0], owner)
+
+    def cancel(self, identity, owner=None):
+        with self.store.connect() as db:
+            owner_clause = " AND owner=?" if owner is not None else ""
+            params = ("rejected", identity, owner) if owner is not None else ("rejected", identity)
+            result = db.execute(f"UPDATE publications SET state=? WHERE id=?{owner_clause} AND state IN ('approval','failed','queued','preparing')",
+                                params)
+            return result.rowcount > 0
 
     def get(self, identity, owner=None):
         with self.store.connect() as db:
@@ -77,7 +89,7 @@ class PublishStore:
             return [dict(r) for r in db.execute("SELECT * FROM publications WHERE owner=? ORDER BY created DESC LIMIT 20", (owner,))]
 
     def update(self, identity, **values):
-        if not values.keys() <= {"state", "container", "target_id", "media_id", "error", "published_at", "payload", "platform"}:
+        if not values.keys() <= {"state", "container", "target_id", "media_id", "error", "published_at", "payload", "platform", "due"}:
             raise ValueError("Invalid publication update")
         with self.store.connect() as db:
             db.execute(f"UPDATE publications SET {','.join(k + '=?' for k in values)} WHERE id=?",

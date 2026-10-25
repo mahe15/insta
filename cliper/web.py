@@ -10,9 +10,12 @@ import os
 import re
 import secrets
 import shutil
+import logging
 import socket
 import time
 from contextlib import asynccontextmanager
+
+log = logging.getLogger("cliper.web")
 from pathlib import Path
 from urllib.parse import quote, urlencode, urlsplit
 
@@ -28,7 +31,7 @@ from .faceless import FacelessStore
 from .maintenance import export_metadata
 from .media import validate_url
 from .models import Analysis, Model, Preferences, Transcript
-from .music import CATEGORIES
+from .music import CATEGORIES, get_categories, resolve_category_folder, resolve_track
 from .pipeline import safe_error
 from .platforms import PLATFORMS
 from .publishing import PublishStore
@@ -93,6 +96,17 @@ class ClipPublish(Model):
     hashtags: list[str] = Field(default_factory=list, max_length=15)
     privacy: str = "public"
     publish_now: bool = True
+
+
+class ScheduleAllClips(Model):
+    platform: str = "youtube"
+    account: str = "main"
+    gap_hours: float = Field(default=2.0, ge=0.05, le=168.0)
+    start_time: float | None = None
+    publish_first_now: bool = True
+    privacy: str = "public"
+    clip_ids: list[int] | None = None
+    schedule_on_youtube: bool = True
 
 
 def read_json(path, default=None):
@@ -408,7 +422,7 @@ def create_app(cfg: Config | None = None, *, start_engine=True, token=None, proj
             try:
                 with store.connect() as db:
                     pub_rows = db.execute(
-                        "SELECT id, origin, feature, account, state, platform, media_id, error, published_at "
+                        "SELECT id, origin, feature, account, state, platform, media_id, error, published_at, due, gap, created "
                         "FROM publications WHERE origin LIKE ? ORDER BY created DESC",
                         (f"{identity}:%",)
                     ).fetchall()
@@ -484,7 +498,7 @@ def create_app(cfg: Config | None = None, *, start_engine=True, token=None, proj
         ranges = analysis.coverage.get("ranges", [])
         if ranges and not any(body.start >= r["start"] and body.end <= r["end"] for r in ranges):
             raise ValueError("Keep edits inside one analyzed range")
-        if body.music_category not in CATEGORIES:
+        if not resolve_category_folder(cfg.music_dir, body.music_category):
             raise ValueError("Unknown music category")
         clip = next((c for c in analysis.clips if c.id == clip_id), None)
         if not clip:
@@ -621,11 +635,278 @@ def create_app(cfg: Config | None = None, *, start_engine=True, token=None, proj
         else:
             raise ValueError(f"Unsupported platform: {body.platform}")
 
+    @app.post("/api/jobs/{identity}/schedule-all")
+    async def schedule_all_clips(identity: str, body: ScheduleAllClips):
+        job = owned(identity)
+        directory = store.directory(identity)
+        analysis = read_json(directory / "analysis.json")
+        if not analysis:
+            raise HTTPException(404, "Project analysis not found")
+        clips = analysis.get("clips", [])
+        if not clips:
+            raise HTTPException(404, "No clips found in project")
+
+        selected_ids = set(body.clip_ids) if body.clip_ids else None
+
+        rendered_clips = []
+        for clip in clips:
+            cid = clip.get("id")
+            if selected_ids is not None and cid not in selected_ids:
+                continue
+            stem = f"clip_{cid:02}"
+            vpath = directory / "clips" / f"{stem}.mp4"
+            if not vpath.is_file():
+                for cand in [directory / f"{stem}.mp4", directory / "clips" / f"clip_{cid}.mp4"]:
+                    if cand.is_file():
+                        vpath = cand
+                        break
+            if vpath.is_file():
+                rendered_clips.append((clip, vpath))
+
+        if not rendered_clips:
+            raise ValueError("No rendered clips found to schedule. Please render your clips before scheduling.")
+
+        rendered_clips.sort(key=lambda item: item[0].get("id", 0))
+
+        # Check which clips are already live on YouTube / target platform
+        with store.connect() as db:
+            live_rows = db.execute(
+                "SELECT origin, platform FROM publications WHERE origin LIKE ? AND state='published'",
+                (f"{identity}:%",)
+            ).fetchall()
+
+        live_clip_ids = set()
+        target_plat = (body.platform or "youtube").strip().lower()
+        for r in live_rows:
+            plat = (r["platform"] or "").strip().lower()
+            is_match = False
+            if target_plat == "youtube" and plat in ("youtube", "yt"):
+                is_match = True
+            elif target_plat == "instagram" and plat in ("instagram", "ig"):
+                is_match = True
+            elif plat == target_plat:
+                is_match = True
+
+            if is_match:
+                parts = r["origin"].split(":")
+                if len(parts) >= 2 and parts[1].isdigit():
+                    live_clip_ids.add(int(parts[1]))
+
+        # Filter out clips that are already live
+        skipped_live_clips = []
+        to_schedule = []
+        for clip, vpath in rendered_clips:
+            cid = clip.get("id")
+            if cid in live_clip_ids:
+                skipped_live_clips.append(clip)
+            else:
+                to_schedule.append((clip, vpath))
+
+        if not to_schedule:
+            if skipped_live_clips:
+                raise ValueError(
+                    f"All {len(skipped_live_clips)} rendered clip(s) are already live on {body.platform.title()}. No remaining clips to schedule."
+                )
+            raise ValueError("No rendered clips found to schedule. Please render your clips before scheduling.")
+
+        account_key = body.account or ("main" if body.platform == "youtube" else "clips")
+        channel_title = account_key
+        if body.platform == "youtube":
+            from .youtube_publishing import get_youtube_config, get_token_path
+            yt_cfg = get_youtube_config(root)
+            acc_info = yt_cfg.get("accounts", {}).get(account_key)
+            if not acc_info:
+                raise ValueError(f"YouTube account '{account_key}' is not configured.")
+            token_path = get_token_path(account_key, cfg.data_dir)
+            if not token_path.is_file():
+                raise ValueError(f"YouTube channel '{acc_info.get('title', account_key)}' is not authorized yet. Authorize it in Settings.")
+            channel_title = acc_info.get("title", account_key)
+        elif body.platform == "instagram":
+            from .publishing import account_config
+            try:
+                acc, _, _ = account_config(account_key, job["owner"])
+                channel_title = str(acc.get("ig_user_id", account_key))
+            except Exception:
+                pass
+        else:
+            raise ValueError(f"Unsupported platform: {body.platform}")
+
+        gap_seconds = int(round(body.gap_hours * 3600))
+        now = time.time()
+        if body.start_time and body.start_time > 0:
+            first_due = float(body.start_time)
+        else:
+            first_due = now if body.publish_first_now else now + gap_seconds
+
+        from .project_rules import description
+        prefs = Preferences.model_validate_json(job["prefs"])
+
+        with store.connect() as db:
+            for clip, _ in to_schedule:
+                cid = clip["id"]
+                db.execute(
+                    "UPDATE publications SET state='rejected' WHERE origin LIKE ? AND state='queued'",
+                    (f"{identity}:{cid}:%",)
+                )
+
+        scheduled_items = []
+        prev_pub_id = None
+
+        for idx, (clip, video_path) in enumerate(to_schedule):
+            cid = clip["id"]
+            clip_due = first_due + (idx * gap_seconds)
+            title = (clip.get("title") or f"Clip {cid}").strip()
+            caption = (clip.get("caption") or clip.get("text") or title).strip()
+            tags = [t.lstrip("#") for t in (clip.get("hashtags") or []) if t.strip()]
+            caption, tags = description(caption, tags, prefs)
+
+            clean_tags = list(tags)
+            desc_text = caption
+            if body.platform == "youtube":
+                if len(clean_tags) < 5 and "shorts" not in [t.lower() for t in clean_tags]:
+                    clean_tags.append("shorts")
+                if clean_tags and not any(f"#{t}" in desc_text for t in clean_tags):
+                    desc_text = f"{desc_text}\n\n{' '.join('#' + t for t in clean_tags[:5])}".strip()
+
+            origin = f"{identity}:{cid}:{body.platform[:2]}:{account_key}:{secrets.token_hex(4)}"
+            post = publications.add(
+                owner=0,
+                chat=0,
+                origin=origin,
+                feature="f1",
+                account=account_key,
+                paths=[video_path],
+                caption=desc_text,
+                hashtags=clean_tags,
+                auto=True,
+                due=clip_due,
+                predecessor=prev_pub_id,
+                gap=gap_seconds if prev_pub_id else 0,
+                platform=body.platform,
+                extra_payload={
+                    "title": title,
+                    "description": desc_text,
+                    "tags": clean_tags,
+                    "privacy": body.privacy or "public",
+                }
+            )
+            prev_pub_id = post["id"]
+
+            video_id = None
+            shorts_url = None
+            is_scheduled_on_yt = False
+            upload_err = None
+
+            # If platform is YouTube and schedule_on_youtube is enabled,
+            # upload directly to YouTube with publishAt for native YouTube-side scheduling!
+            if body.platform == "youtube" and getattr(body, "schedule_on_youtube", True):
+                from .youtube_publishing import upload_to_youtube
+                if idx == 0 and body.publish_first_now:
+                    clip_publish_at = None
+                    clip_privacy = body.privacy or "public"
+                else:
+                    clip_publish_at = clip_due
+                    clip_privacy = "private"
+
+                try:
+                    publications.update(post["id"], state="publishing")
+                    yt_res = await asyncio.to_thread(
+                        upload_to_youtube,
+                        account_key=account_key,
+                        video_path=video_path,
+                        title=title,
+                        description=desc_text,
+                        tags=clean_tags,
+                        privacy=clip_privacy,
+                        made_for_kids=False,
+                        is_short=True,
+                        publish_at=clip_publish_at,
+                        project_root=root,
+                        data_dir=cfg.data_dir,
+                    )
+                    video_id = yt_res.get("id")
+                    shorts_url = yt_res.get("shorts_url") or (f"https://www.youtube.com/shorts/{video_id}" if video_id else None)
+                    is_scheduled_on_yt = bool(clip_publish_at)
+                    publications.update(
+                        post["id"],
+                        state="published",
+                        media_id=video_id,
+                        published_at=time.time(),
+                        due=clip_due,
+                    )
+                except Exception as exc:
+                    upload_err = str(exc)[:500]
+                    log.warning("YouTube direct schedule upload failed for clip %s: %s", cid, exc)
+                    publications.update(post["id"], state="failed", error=upload_err)
+
+            state = "published" if video_id else ("failed" if upload_err else "queued")
+            scheduled_items.append({
+                "clip_id": cid,
+                "title": title,
+                "publication_id": post["id"],
+                "media_id": video_id,
+                "url": shorts_url,
+                "due": clip_due,
+                "gap_seconds": gap_seconds if idx > 0 else 0,
+                "platform": body.platform,
+                "state": state,
+                "error": upload_err,
+                "scheduled_on_youtube": is_scheduled_on_yt,
+            })
+
+        skip_note = f" ({len(skipped_live_clips)} live clip{'s' if len(skipped_live_clips) != 1 else ''} skipped)" if skipped_live_clips else ""
+        failed_count = sum(1 for item in scheduled_items if item.get("state") == "failed")
+        if failed_count > 0:
+            msg = f"Scheduled {len(scheduled_items) - failed_count} clips successfully ({failed_count} failed to upload). Inspect Settings or quota.{skip_note}"
+        elif any(item.get("scheduled_on_youtube") for item in scheduled_items):
+            msg = f"Successfully uploaded and scheduled {len(scheduled_items)} clips directly on YouTube Shorts with {body.gap_hours:g}-hour intervals. YouTube will publish each Short on schedule.{skip_note}"
+        else:
+            msg = f"Successfully scheduled {len(scheduled_items)} clips with a {body.gap_hours:g}-hour interval.{skip_note}"
+
+        return {
+            "ok": True,
+            "count": len(scheduled_items),
+            "skipped_live_count": len(skipped_live_clips),
+            "skipped_clip_ids": [c.get("id") for c in skipped_live_clips],
+            "gap_hours": body.gap_hours,
+            "platform": body.platform,
+            "account": account_key,
+            "channel_title": channel_title,
+            "items": scheduled_items,
+            "message": msg,
+        }
+
+    @app.post("/api/jobs/{identity}/publications/{pub_id}/cancel")
+    def cancel_publication(identity: str, pub_id: str):
+        job = owned(identity)
+        cancelled = publications.cancel(pub_id, owner=job["owner"])
+        if not cancelled:
+            with store.connect() as db:
+                res = db.execute(
+                    "UPDATE publications SET state='rejected' WHERE id=? AND owner=? AND origin LIKE ?",
+                    (pub_id, job["owner"], f"{identity}:%")
+                )
+                if res.rowcount > 0:
+                    return {"ok": True, "message": "Publication cancelled successfully"}
+            raise HTTPException(404, "Publication not found or not in cancellable state")
+        return {"ok": True, "message": "Publication cancelled successfully"}
+
+    @app.post("/api/jobs/{identity}/schedule/cancel-all")
+    def cancel_all_job_publications(identity: str):
+        owned(identity)
+        with store.connect() as db:
+            result = db.execute(
+                "UPDATE publications SET state='rejected' WHERE origin LIKE ? AND state IN ('queued', 'approval')",
+                (f"{identity}:%",)
+            )
+        return {"ok": True, "cancelled": result.rowcount, "message": f"Cancelled {result.rowcount} scheduled publications"}
+
 
     @app.put("/api/jobs/{identity}/preferences")
     def project_preferences(identity: str, body: dict):
         job = owned(identity)
         allowed_fields = {"style", "captions", "reframe", "width", "layout", "music", "music_gain",
+                          "music_override", "music_folder", "music_track",
                           "fps", "color_grade", "export_quality", "description_suffix", "overlay_text",
                           "music_normalize", "music_ducking", "smart_crop", "preserve_wide_groups", "trim_edges",
                           "text_mode", "sound_effects", "sfx_gain", "reaction_zoom"}
@@ -867,24 +1148,28 @@ def create_app(cfg: Config | None = None, *, start_engine=True, token=None, proj
     @app.get("/api/music")
     def music():
         result = []
-        for category, name in CATEGORIES.items():
-            folder = cfg.music_dir / name
+        all_cats = get_categories(cfg.music_dir)
+        for category, name in all_cats.items():
+            folder = resolve_category_folder(cfg.music_dir, category) or (cfg.music_dir / name)
             tracks = [{"name": p.name, "bytes": p.stat().st_size, "url": f"/api/music/{category}/file/{quote(p.name)}"} for p in sorted(folder.glob("*")) if p.is_file() and not p.is_symlink() and p.suffix.lower() in AUDIO]
             result.append({"id": category, "name": name, "tracks": tracks})
         return result
 
     @app.get("/api/music/{category}/file/{name}")
     def music_file(category: str, name: str):
-        if category not in CATEGORIES or Path(name).name != name or Path(name).suffix.lower() not in AUDIO:
+        if Path(name).name != name or Path(name).suffix.lower() not in AUDIO:
             raise HTTPException(404, "Track not found")
-        return FileResponse(contained(cfg.music_dir / CATEGORIES[category] / name, cfg.music_dir))
+        folder = resolve_category_folder(cfg.music_dir, category)
+        if not folder or not (folder / name).is_file():
+            raise HTTPException(404, "Track not found")
+        return FileResponse(contained(folder / name, cfg.music_dir))
 
     @app.post("/api/music/{category}/upload")
     async def upload_music(category: str, file: UploadFile):
         suffix = Path(file.filename or "").suffix.lower()
-        if category not in CATEGORIES or suffix not in AUDIO:
+        folder = resolve_category_folder(cfg.music_dir, category)
+        if not folder or suffix not in AUDIO:
             raise ValueError("Choose a music category and supported audio file")
-        folder = cfg.music_dir / CATEGORIES[category]
         folder.mkdir(parents=True, exist_ok=True)
         name = re.sub(r"[^\w .-]", "_", Path(file.filename).stem)[:80] + "-" + secrets.token_hex(3) + suffix
         await save_upload(file, folder / name, 100 * 1024**2)
@@ -946,7 +1231,7 @@ def create_app(cfg: Config | None = None, *, start_engine=True, token=None, proj
                 "default_tags": v.get("default_tags", ["shorts", "clips"]),
                 "thumbnail": v.get("thumbnail", ""),
                 "auto_publish": bool(v.get("auto_publish", False)),
-                "owner_allowed": owner in v.get("owners", [0]) or owner == 0,
+                "owner_allowed": owner in v.get("owners", [0]) or owner == 0 or 0 in v.get("owners", [0]),
                 "authorized": authorized,
             })
         return {
@@ -1028,7 +1313,7 @@ def create_app(cfg: Config | None = None, *, start_engine=True, token=None, proj
                 "response_type": "code",
                 "scope": " ".join(YOUTUBE_SCOPES),
                 "access_type": "offline",
-                "prompt": "consent",
+                "prompt": "select_account consent",
                 "state": state_data,
             })
         )
@@ -1133,13 +1418,14 @@ def create_app(cfg: Config | None = None, *, start_engine=True, token=None, proj
         account = body.get("account", "main")
         privacy = body.get("privacy", "public")
         auto = bool(body.get("auto", False))
+        due = body.get("due") or body.get("publish_at")
         if not paths:
             raise ValueError("No video paths provided")
         identity = secrets.token_hex(6)
         origin = body.get("origin") or f"custom:{identity}"
         post = publications.add(
             owner, 0, f"{origin}:yt:{account}", "f1", account,
-            paths, caption, tags, auto=auto, platform="youtube"
+            paths, caption, tags, auto=auto, due=due, platform="youtube"
         )
         return {"ok": True, "publication": post}
 

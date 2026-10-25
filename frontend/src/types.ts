@@ -30,6 +30,9 @@ export type Preferences = {
   layout: string;
   music: boolean;
   music_ducking: boolean;
+  music_override?: string | null;
+  music_folder?: string | null;
+  music_track?: string | null;
   smart_crop: boolean;
   preserve_wide_groups: boolean;
   trim_edges: boolean;
@@ -61,6 +64,32 @@ export type ClipPublication = {
   media_id?: string | null;
   error?: string;
   published_at?: number | null;
+  due?: number | null;
+  gap?: number | null;
+  created?: number;
+};
+export type ScheduleAllResult = {
+  ok: boolean;
+  count: number;
+  skipped_live_count?: number;
+  skipped_clip_ids?: number[];
+  gap_hours: number;
+  platform: string;
+  account: string;
+  channel_title: string;
+  items: {
+    clip_id: number;
+    title: string;
+    publication_id: string;
+    due: number;
+    gap_seconds: number;
+    platform: string;
+    state: string;
+    media_id?: string | null;
+    url?: string | null;
+    scheduled_on_youtube?: boolean;
+  }[];
+  message: string;
 };
 export type Clip = {
   moment_type: string;

@@ -71,7 +71,7 @@ async def test_real_square_render_with_twenty_percent_music(cfg, transcript, cli
     track = cfg.music_dir / "Chill - Ambient" / "track.wav"
     await run([cfg.ffmpeg(), "-v", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=200:duration=1", str(track)])
     short = clip.model_copy(update={"end": 2.5})
-    prefs = Preferences(width=360)
+    prefs = Preferences(width=360, music_gain=.2)
     output = await render(source, cfg.data_dir / "exports", transcript, short, prefs, cfg, lambda: False)
     assert (await quality_check(output, short, prefs, cfg, lambda: False))["full_decode"] == "passed"
     metadata = json.loads(output.with_suffix(".json").read_text())

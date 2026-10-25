@@ -348,3 +348,88 @@ def test_prompts_crud_and_carousel_input_prompt(web):
     our_job = next((j for j in list_car if j["id"] == job_id), None)
     assert our_job is not None
     assert our_job["prompt"] == "10 pages a day compounding habits"
+
+
+def test_project_music_selection_folder_track_and_sound_gain(web):
+    client, store, cfg = web
+    from cliper.models import Preferences
+    from cliper.music import choose, resolve_track, resolve_category_folder
+
+    # 1. Verify default gain is 50% (0.50)
+    default_prefs = Preferences()
+    assert default_prefs.music_gain == 0.50
+    assert default_prefs.music_folder is None
+    assert default_prefs.music_track is None
+
+    # 2. Setup mock audio files in music dir
+    phonk_dir = cfg.music_dir / "Phonk"
+    phonk_dir.mkdir(parents=True, exist_ok=True)
+    phonk_track = phonk_dir / "test_phonk.mp3"
+    phonk_track.write_bytes(b"phonk_audio_data")
+
+    chill_dir = cfg.music_dir / "Chill - Ambient"
+    chill_dir.mkdir(parents=True, exist_ok=True)
+    chill_track = chill_dir / "test_chill.mp3"
+    chill_track.write_bytes(b"chill_audio_data")
+
+    # Test folder resolution aliases
+    assert resolve_category_folder(cfg.music_dir, "phonk") == phonk_dir
+    assert resolve_category_folder(cfg.music_dir, "chill") == chill_dir
+    assert resolve_category_folder(cfg.music_dir, "Chill - Ambient") == chill_dir
+    assert resolve_category_folder(cfg.music_dir, "chill_ambient") == chill_dir
+
+    # Test track resolution
+    assert resolve_track(cfg.music_dir, "test_phonk.mp3") == phonk_track.resolve()
+    assert resolve_track(cfg.music_dir, "test_chill.mp3") == chill_track.resolve()
+
+    # Test choosing from folder
+    assert choose(cfg.music_dir, "phonk") == phonk_track.resolve()
+    assert choose(cfg.music_dir, "chill") == chill_track.resolve()
+
+    # 3. Create job with specific music folder and 50% sound level
+    res = client.post("/api/jobs", json={
+        "source": "https://youtube.com/watch?v=dQw4w9WgXcQ",
+        "preferences": {
+            "music": True,
+            "music_gain": 0.50,
+            "music_folder": "phonk",
+            "music_track": None,
+        }
+    })
+    assert res.status_code == 201
+    job = res.json()
+    job_record = store.get(job["id"])
+    saved_prefs = json.loads(job_record["prefs"])
+    assert saved_prefs["music_gain"] == 0.50
+    assert saved_prefs["music_folder"] == "phonk"
+
+    # 4. Create job with specific song
+    res_track = client.post("/api/jobs", json={
+        "source": "https://youtube.com/watch?v=dQw4w9WgXcQ",
+        "preferences": {
+            "music": True,
+            "music_gain": 0.50,
+            "music_folder": None,
+            "music_track": "test_chill.mp3",
+        }
+    })
+    assert res_track.status_code == 201
+    job_t = res_track.json()
+    saved_t_prefs = json.loads(store.get(job_t["id"])["prefs"])
+    assert saved_t_prefs["music_track"] == "test_chill.mp3"
+    assert saved_t_prefs["music_gain"] == 0.50
+
+    # 5. Create job with default (neither chosen)
+    res_default = client.post("/api/jobs", json={
+        "source": "https://youtube.com/watch?v=dQw4w9WgXcQ",
+        "preferences": {
+            "music": True,
+            "music_gain": 0.50,
+        }
+    })
+    assert res_default.status_code == 201
+    saved_def_prefs = json.loads(store.get(res_default.json()["id"])["prefs"])
+    assert saved_def_prefs["music_folder"] is None
+    assert saved_def_prefs["music_track"] is None
+    assert saved_def_prefs["music_gain"] == 0.50
+

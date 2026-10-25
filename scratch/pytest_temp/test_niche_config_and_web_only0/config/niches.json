@@ -1,0 +1,9 @@
+{
+  "dark": {
+    "name": "Original series",
+    "threshold": 85,
+    "pillars": [
+      "Practice"
+    ]
+  }
+}

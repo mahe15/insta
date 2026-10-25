@@ -1,0 +1,10 @@
+{
+  "clips": {
+    "ig_user_id": "1234567890",
+    "login": "instagram",
+    "token_env": "IG_CLIPS_TOKEN",
+    "owners": [
+      7
+    ]
+  }
+}

@@ -1,0 +1,1 @@
+{"client_id": "test-client", "client_secret": "test-secret", "accounts": {"main": {"title": "Main Channel", "channel_id": "UC_MAIN", "privacy": "public", "default_tags": ["shorts"], "owners": [0]}}}

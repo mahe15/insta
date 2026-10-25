@@ -57,7 +57,7 @@ class Preferences(Model):
     reaction_zoom: bool = True
     scan_minutes: int = Field(default=24, ge=6, le=1440)
     focus_times: list[float] = Field(default_factory=list, max_length=12)
-    music_gain: float = Field(default=.20, ge=0, le=.30)
+    music_gain: float = Field(default=.50, ge=0, le=1.0)
     music_normalize: bool = True
     clipping_mode: Literal["audio_first", "gemini_browser"] = "audio_first"
     gemini_verify_captions: bool = True
@@ -78,6 +78,9 @@ class Preferences(Model):
     layout: Literal["square_hook", "legacy"] = "square_hook"
     music: bool = True
     music_ducking: bool = True
+    music_override: str | None = Field(default=None, description="Force all clips to use this music category (e.g. 'phonk')")
+    music_folder: str | None = Field(default=None, description="Specific folder or category to select music from")
+    music_track: str | None = Field(default=None, description="Specific song file or track path to use for clips")
     smart_crop: bool = True
     preserve_wide_groups: bool = False
     trim_edges: bool = True
@@ -161,7 +164,7 @@ class Proposal(Model):
     reason: str = Field(max_length=1000)
     hook_text: str = Field(max_length=500)
     ratings: Ratings
-    music_category: Literal["cinematic_epic", "emotional_sad", "suspense_thriller", "energetic_hype", "chill_ambient"] = "chill_ambient"
+    music_category: str = "chill_ambient"
     caption: str = Field(default="", max_length=1800)
     hashtags: list[str] = Field(default_factory=list, max_length=5)
     hook_variants: list[str] = Field(default_factory=list, max_length=3)
@@ -173,8 +176,13 @@ class Proposal(Model):
         if not isinstance(data, dict):
             return data
         res = dict(data)
-        valid_cats = {"cinematic_epic", "emotional_sad", "suspense_thriller", "energetic_hype", "chill_ambient"}
-        if res.get("music_category") not in valid_cats:
+        cat = str(res.get("music_category", "")).strip()
+        from .music import CATEGORIES
+        valid_cats = set(CATEGORIES.keys()) | {v.lower().replace(" - ", "_").replace(" ", "_") for v in CATEGORIES.values()}
+        cat_norm = cat.lower().replace("-", "_").replace(" ", "_")
+        if cat_norm in valid_cats or cat in CATEGORIES:
+            res["music_category"] = cat_norm if cat_norm in valid_cats else cat
+        else:
             res["music_category"] = "chill_ambient"
         for field, max_len in [("title", 120), ("reason", 1000), ("hook_text", 500),
                                ("caption", 1800), ("audience_value", 300)]:
@@ -207,7 +215,7 @@ class Clip(Model):
     ratings: Ratings
     text: str
     selection_method: str
-    music_category: Literal["cinematic_epic", "emotional_sad", "suspense_thriller", "energetic_hype", "chill_ambient"] = "chill_ambient"
+    music_category: str = "chill_ambient"
     caption: str = ""
     hashtags: list[str] = Field(default_factory=list, max_length=5)
     hook_variants: list[str] = Field(default_factory=list, max_length=3)

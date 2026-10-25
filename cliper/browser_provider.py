@@ -23,13 +23,48 @@ log = logging.getLogger(__name__)
 
 
 URL = "https://chatgpt.com/"
-COMPOSER = '#prompt-textarea:visible, [data-testid="prompt-textarea"]:visible, textarea[aria-label="Chat with ChatGPT"]:visible'
-SEND = 'button[data-testid="send-button"], button[aria-label="Send prompt"], button[aria-label="Send message"]'
-STOP = 'button[data-testid="stop-button"], button[aria-label="Stop generating"], button[aria-label="Stop streaming"]'
-ASSISTANT = '[data-message-author-role="assistant"]'
-COPY = 'button[data-testid="copy-turn-action-button"], button[aria-label="Copy"]'
-USER_MENU = '[data-testid="user-menu-button"], [data-testid="profile-button"], [data-testid="accounts-profile-button"], button[aria-label*="profile" i], button[aria-label*="account" i]'
-LOGIN = '[data-testid="login-button"]:visible, a[href*="/login"]:visible, button:text-is("Log in"):visible'
+COMPOSER = (
+    '#prompt-textarea:visible, [data-testid="prompt-textarea"]:visible, '
+    'textarea[aria-label*="ChatGPT" i]:visible, div.ProseMirror:visible, '
+    'div[data-composer-markdown]:visible, [role="textbox"][contenteditable="true"]:visible, '
+    'div[aria-label*="ChatGPT" i][contenteditable="true"]:visible'
+)
+SEND = (
+    'button[data-testid="send-button"], button[aria-label="Send"], button[aria-label="Send prompt"], '
+    'button[aria-label="Send message"], button[type="submit"][aria-label*="Send" i], '
+    'button[data-composer-navigation-target="send"], button[class*="bg-composer-primary"]'
+)
+STOP = (
+    'button[data-testid="stop-button"], button[aria-label="Stop generating"], '
+    'button[aria-label="Stop streaming"], button[aria-label*="Stop" i]'
+)
+ASSISTANT = (
+    '[data-message-author-role="assistant"], '
+    '[data-markdown-text-style="assistant-message"]:not([data-message-author-role="assistant"] *)'
+)
+COPY = (
+    'button[data-testid="copy-turn-action-button"], button[aria-label="Copy"], '
+    'button[aria-label="Copy message"], button[aria-label*="Copy code" i], '
+    'button:has-text("Copy code"), button:text-is("Copy code"), '
+    'button[data-testid*="copy" i], button[aria-label*="copy" i], '
+    'button[data-testid="copy-button"], button:text-is("Copy"), button:has-text("Copy")'
+)
+CODE_BLOCKS = (
+    'pre code, pre, [class*="CodeBlock"] pre, [class*="CodeBlock"] code, '
+    '[class*="InlineCodePane"] code, [class*="InlineCodePane"] pre, '
+    '[class*="chatgpt-code-scrollport"] pre, [class*="chatgpt-code-scrollport"] code, '
+    '[class*="CodeBlock"], [class*="InlineCodePane"], .chatgpt-code-scrollport, '
+    'div[class*="code-block"], div.cm-content, div.font-mono, [data-testid*="code"], code'
+)
+USER_MENU = (
+    '[data-testid="user-menu-button"], [data-testid="profile-button"], '
+    '[data-testid="accounts-profile-button"], button[aria-label*="profile" i], '
+    'button[aria-label*="account" i]'
+)
+LOGIN = (
+    '[data-testid="login-button"]:visible, a[href*="/login"]:visible, '
+    'button:text-is("Log in"):visible, button:has-text("Log in"):visible'
+)
 
 
 async def dismiss_popups(page):
@@ -101,22 +136,32 @@ def repair_from_validation_errors(data: dict, errors: list[dict]) -> dict:
         elif err_type == "literal_error":
             if key == "music_category" and isinstance(curr, dict):
                 curr[key] = "chill_ambient"
+        elif "Mathematical claim does not match" in str(err.get("msg", "")) or "calculation" in str(err.get("msg", "")).lower():
+            if isinstance(curr, dict) and key == "calculations":
+                curr[key] = []
+            elif isinstance(curr, list) and isinstance(key, int) and 0 <= key < len(curr):
+                curr.pop(key)
     return repaired
 
 
 def parse_result(raw: str, request_id: str, result_type):
-    """Accept only one complete JSON object, optionally enclosed in a JSON code fence."""
+    """Accept a complete JSON object, optionally enclosed in a code fence or surrounding text."""
     content = raw.strip().replace("\r\n", "\n")
     fence_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", content, re.DOTALL | re.IGNORECASE)
     if fence_match:
         content = fence_match.group(1).strip()
     else:
-        content = re.sub(r"^(?:json|JSON)\s*\n", "", content).strip()
-        escaped = re.fullmatch(r"<escape>\s*(.*?)\s*</escape>", content, re.DOTALL)
+        escaped = re.search(r"<escape>\s*(.*?)\s*</escape>", content, re.DOTALL)
         if escaped:
             content = escaped.group(1).strip()
-        if not (content.startswith("{") and content.endswith("}")):
-            raise ValueError("Expected one JSON object")
+        else:
+            content = re.sub(r"^(?:json|JSON)\s*\n", "", content).strip()
+
+    start = content.find("{")
+    end = content.rfind("}")
+    if start == -1 or end <= start:
+        raise ValueError("Expected one JSON object")
+    content = content[start:end+1]
 
     content = re.sub(r'\.replace\([^)]*\)', '', content)
 
@@ -130,7 +175,9 @@ def parse_result(raw: str, request_id: str, result_type):
 
     try:
         value = json.loads(content, object_pairs_hook=unique)
-    except json.JSONDecodeError as jde:
+    except (json.JSONDecodeError, ValueError) as jde:
+        if isinstance(jde, ValueError) and "Duplicate JSON key" in str(jde):
+            raise
         if "Extra data" in str(jde):
             raise ValueError("Expected one JSON object") from jde
         try:
@@ -229,9 +276,11 @@ class BrowserEditorialClient:
 
     async def signed_in(self, page) -> bool:
         try:
-            return bool(await page.locator(COMPOSER).first.is_visible()
-                        and await page.locator(USER_MENU).first.is_visible()
-                        and not await page.locator(LOGIN).first.is_visible())
+            if not await page.locator(COMPOSER).first.is_visible():
+                return False
+            if await page.locator(LOGIN).first.is_visible():
+                return False
+            return True
         except Exception:
             return False
 
@@ -240,7 +289,8 @@ class BrowserEditorialClient:
         if await self.signed_in(page):
             return
         try:
-            await page.locator(USER_MENU).first.wait_for(state="visible", timeout=10000)
+            await page.locator(COMPOSER).first.wait_for(state="visible", timeout=15000)
+            await dismiss_popups(page)
             if await self.signed_in(page):
                 return
         except Exception:
@@ -265,37 +315,44 @@ class BrowserEditorialClient:
             if await messages.count() > before:
                 message = messages.last
                 turn = message.locator('xpath=ancestor::*[self::article or '
-                                       '(self::section and @data-turn="assistant")][1]')
+                                       '(self::section and @data-turn="assistant") or '
+                                       '@data-talvt-turn-state or @data-turn-key or @data-content-search-turn-key or '
+                                       './/button[@aria-label="Copy" or @aria-label="Copy message" or @data-testid="copy-turn-action-button" or contains(translate(., "COPY", "copy"), "copy")]][1]')
                 container = turn if await turn.count() > 0 else message
 
                 is_stopped = not await page.locator(STOP).first.is_visible()
                 has_copy = (await container.locator(COPY).count() > 0
-                            or await container.locator('button[data-testid="copy-button"]').count() > 0
-                            or await container.locator('button:text-is("Copy")').count() > 0)
+                            or await message.locator(COPY).count() > 0)
                 if not has_copy:
                     try:
                         await message.hover(timeout=150)
                         has_copy = (await container.locator(COPY).count() > 0
-                                    or await container.locator('button[data-testid="copy-button"]').count() > 0
-                                    or await container.locator('button:text-is("Copy")').count() > 0)
+                                    or await message.locator(COPY).count() > 0)
                     except Exception:
                         pass
 
-                content = message.locator(".markdown")
-                raw = await content.inner_text() if await content.count() == 1 else await message.inner_text()
+                content = message.locator(".markdown, [class*='MarkdownRoot'], [data-markdown-text-style='assistant-message']")
+                raw = await content.first.inner_text() if await content.count() >= 1 else await message.inner_text()
 
-                code_locator = message.locator("pre code, pre")
-                if await code_locator.count() >= 1:
-                    code_text = (await code_locator.first.inner_text()).strip()
-                    if code_text and (code_text.startswith("{") or code_text.startswith("```")):
-                        raw = code_text
+                code_locators = message.locator(CODE_BLOCKS)
+                if await code_locators.count() == 0 and container != message:
+                    code_locators = container.locator(CODE_BLOCKS)
+
+                for idx in reversed(range(await code_locators.count())):
+                    try:
+                        candidate = (await code_locators.nth(idx).inner_text()).strip()
+                        if "{" in candidate and "}" in candidate:
+                            raw = candidate
+                            break
+                    except Exception:
+                        continue
 
                 if raw != previous:
                     previous, stable_since = raw, time.monotonic()
 
                 time_stable = time.monotonic() - stable_since
                 if raw.strip() and is_stopped:
-                    if has_copy and time_stable >= 2:
+                    if (has_copy and time_stable >= 2) or time_stable >= 6:
                         return raw
             await asyncio.sleep(.4)
         raise BrowserProviderError(
@@ -313,20 +370,31 @@ class BrowserEditorialClient:
             before = await page.locator(ASSISTANT).count()
             composer = page.locator(COMPOSER).first
             await composer.fill(payload)
+            await asyncio.sleep(0.3)
             send_btn = page.locator(SEND).first
-            try:
-                if await send_btn.is_disabled():
+            for _ in range(5):
+                if await send_btn.is_enabled():
+                    break
+                try:
                     await composer.press("Space")
                     await composer.press("Backspace")
+                except Exception:
+                    pass
+                await asyncio.sleep(0.3)
+            try:
+                if await send_btn.is_enabled():
+                    await send_btn.click(timeout=5000)
+                else:
+                    await composer.press("Enter")
             except Exception:
-                pass
-            await send_btn.click(timeout=15000)
+                await composer.press("Enter")
             raw = await self.wait_reply(page, before)
             self.last_web_links = list(dict.fromkeys([
                 await a.get_attribute("href") for a in await page.locator(ASSISTANT).last.locator('a[href^="https://"]').all()
             ]))[:40]
             return raw
-        except PlaywrightError:
+        except PlaywrightError as exc:
+            log.warning("Playwright error during ChatGPT exchange: %s", type(exc).__name__)
             # Playwright's original call log can contain the prompt; keep it out of logs/Telegram.
             raise BrowserProviderError(
                 "Could not operate ChatGPT's website. Check the browser login, connection and UI. "

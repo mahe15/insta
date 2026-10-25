@@ -65,6 +65,22 @@ def get_youtube_config(project_root: Path | str | None = None) -> dict[str, Any]
     # Check environment variable fallbacks
     config["client_id"] = config.get("client_id") or os.getenv("YOUTUBE_CLIENT_ID", "")
     config["client_secret"] = config.get("client_secret") or os.getenv("YOUTUBE_CLIENT_SECRET", "")
+
+    # Discover any orphaned token files in data/youtube/tokens/
+    data_dir = root / "data"
+    tokens_dir = data_dir / "youtube" / "tokens"
+    if tokens_dir.is_dir():
+        for tf in tokens_dir.glob("*.json"):
+            clean_stem = tf.stem.lower()
+            if not any(k.lower() == clean_stem for k in config["accounts"]):
+                config["accounts"][clean_stem] = {
+                    "channel_id": "",
+                    "title": tf.stem,
+                    "privacy": "public",
+                    "default_tags": ["shorts", "clips"],
+                    "auto_publish": False,
+                    "owners": [0],
+                }
     return config
 
 
@@ -77,7 +93,12 @@ def save_youtube_config(data: dict[str, Any], project_root: Path | str | None = 
 
 def get_token_path(account_key: str, data_dir: Path | str = "data") -> Path:
     clean_key = re.sub(r"[^\w-]", "_", account_key)
-    return Path(data_dir) / "youtube" / "tokens" / f"{clean_key}.json"
+    tokens_dir = Path(data_dir) / "youtube" / "tokens"
+    if tokens_dir.is_dir():
+        for tf in tokens_dir.glob("*.json"):
+            if tf.stem.lower() == clean_key.lower():
+                return tf
+    return tokens_dir / f"{clean_key}.json"
 
 
 def get_credentials(account_key: str, data_dir: Path | str = "data", project_root: Path | str | None = None) -> Credentials:
@@ -161,6 +182,7 @@ def upload_to_youtube(
     privacy: str = "public",
     made_for_kids: bool = False,
     is_short: bool = True,
+    publish_at: str | float | int | Any | None = None,
     project_root: Path | str | None = None,
     data_dir: Path | str = "data",
     progress_callback=None,
@@ -191,6 +213,45 @@ def upload_to_youtube(
     if privacy not in {"public", "unlisted", "private"}:
         privacy = "public"
 
+    from datetime import datetime, timezone
+    publish_at_iso = None
+    if publish_at is not None:
+        target_ts: float | None = None
+        if isinstance(publish_at, (int, float)):
+            target_ts = float(publish_at)
+        elif isinstance(publish_at, str) and publish_at.strip():
+            s = publish_at.strip()
+            try:
+                target_ts = float(s)
+            except ValueError:
+                try:
+                    dt_parsed = datetime.fromisoformat(s.replace("Z", "+00:00"))
+                    target_ts = dt_parsed.timestamp()
+                except Exception as exc:
+                    log.warning("Could not parse publish_at string '%s': %s", s, exc)
+        elif hasattr(publish_at, "timestamp"):
+            target_ts = publish_at.timestamp()
+
+        if target_ts is not None:
+            now_ts = time.time()
+            # YouTube API requires publishAt to be in the future (at least ~1 min ahead).
+            # If target_ts is in the past or within 60s, clamp to 120s ahead so scheduling succeeds.
+            if target_ts <= now_ts + 60:
+                target_ts = now_ts + 120
+            dt = datetime.fromtimestamp(target_ts, tz=timezone.utc)
+            publish_at_iso = dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+    status_dict: dict[str, Any] = {
+        "selfDeclaredMadeForKids": bool(made_for_kids),
+    }
+    if publish_at_iso:
+        # YouTube Data API v3 requirement:
+        # Scheduled publishing requires privacyStatus='private' and an RFC 3339 publishAt timestamp.
+        status_dict["privacyStatus"] = "private"
+        status_dict["publishAt"] = publish_at_iso
+    else:
+        status_dict["privacyStatus"] = privacy
+
     body = {
         "snippet": {
             "title": clean_title,
@@ -198,10 +259,7 @@ def upload_to_youtube(
             "tags": tags[:500],
             "categoryId": "22",  # People & Blogs
         },
-        "status": {
-            "privacyStatus": privacy,
-            "selfDeclaredMadeForKids": bool(made_for_kids),
-        },
+        "status": status_dict,
     }
 
     media = MediaFileUpload(str(path), chunksize=4 * 1024 * 1024, resumable=True)
@@ -220,11 +278,13 @@ def upload_to_youtube(
     if not video_id:
         raise ValueError("YouTube API did not return a video ID")
 
+    resp_status = response.get("status", {})
     return {
         "id": video_id,
         "url": f"https://youtu.be/{video_id}",
         "shorts_url": f"https://www.youtube.com/shorts/{video_id}",
-        "status": response.get("status", {}).get("privacyStatus", privacy),
+        "status": "scheduled" if publish_at_iso else resp_status.get("privacyStatus", privacy),
+        "scheduled_at": publish_at_iso,
     }
 
 
@@ -245,8 +305,8 @@ class YouTubePublisher:
             raise ValueError(f"YouTube account '{account_key}' is not configured in config/youtube.json")
 
         owner = post.get("owner", 0)
-        allowed_owners = account_info.get("owners", [0])
-        if owner not in allowed_owners and owner != 0:
+        allowed_owners = set(account_info.get("owners", [0]))
+        if owner not in allowed_owners and owner != 0 and 0 not in allowed_owners:
             raise ValueError(f"Telegram owner {owner} is not authorized for YouTube account '{account_key}'")
 
         payload = json.loads(post["payload"])
@@ -269,6 +329,9 @@ class YouTubePublisher:
         # Pre-publish lock to avoid duplicate attempts
         self.store.update(post["id"], state="publishing")
 
+        due = post.get("due")
+        publish_at = due if (due and due > time.time() + 60) else None
+
         try:
             result = await asyncio.to_thread(
                 upload_to_youtube,
@@ -280,6 +343,7 @@ class YouTubePublisher:
                 privacy=privacy,
                 made_for_kids=made_for_kids,
                 is_short=True,
+                publish_at=publish_at,
                 project_root=self.project_root,
                 data_dir=self.data_dir,
             )
@@ -352,7 +416,7 @@ async def run_cli_auth(account_key: str, cfg=None):
     flow = InstalledAppFlow.from_client_config(client_config, scopes=YOUTUBE_SCOPES)
     print(f"\n[+] Starting OAuth flow for YouTube account '{account_key}'...")
     print("    Your default browser will open to select your Google account / YouTube channel.")
-    creds = await asyncio.to_thread(flow.run_local_server, port=8088, prompt="consent")
+    creds = await asyncio.to_thread(flow.run_local_server, port=8088, prompt="select_account consent")
     data_dir = getattr(cfg, "data_dir", Path("data")) if cfg else Path("data")
     save_credentials(account_key, creds, data_dir)
 
@@ -369,4 +433,34 @@ async def run_cli_auth(account_key: str, cfg=None):
         print(f"    Account mapping saved to config/youtube.json")
     except Exception as exc:
         print(f"\n[!] Token saved for '{account_key}', but could not fetch channel metadata: {exc}")
+
+
+def list_accounts_cli(project_root: Path | str | None = None) -> None:
+    """Print configured YouTube accounts to stdout."""
+    cfg = get_youtube_config(project_root)
+    accounts = cfg.get("accounts", {})
+    if not accounts:
+        print("\nNo YouTube accounts configured yet in config/youtube.json.")
+        return
+    print("\nCurrently configured YouTube accounts:")
+    for k, v in accounts.items():
+        token_path = get_token_path(k)
+        status = "Connected" if token_path.is_file() else "Needs Auth"
+        title = v.get("title") or k
+        cid = v.get("channel_id") or "No Channel ID"
+        print(f"  • {k:12} : \"{title}\" (ID: {cid}) [{status}]")
+    print()
+
+
+def suggest_next_account_key(project_root: Path | str | None = None) -> str:
+    """Suggest next available unique account key."""
+    cfg = get_youtube_config(project_root)
+    accounts = {k.lower() for k in cfg.get("accounts", {})}
+    if "main" not in accounts:
+        return "main"
+    i = 2
+    while f"channel_{i}" in accounts:
+        i += 1
+    return f"channel_{i}"
+
 
