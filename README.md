@@ -1,178 +1,580 @@
 # CLIPER
 
-**Editing upgrade:** hooks follow the visible video frame, subtitles use measured text fitting and normalized timing, and new exports default to 1080p/60 fps with a high-quality NVENC master. Large Telegram deliveries get a separate compact copy. [Editing guide and verification](EDITING_PIPELINE.md).
+> **The Autonomous AI Short-Form Video & Multi-Platform Content Studio**  
+> *Turn long YouTube videos, 24-hour livestreams, podcasts, and local footage into viral, perfectly reframed vertical shorts (1080p @ 60fps), automated Instagram Carousels, and X (Twitter) viral research posts — with zero-cost browser AI or premier API providers, and direct multi-account publishing to YouTube Shorts and Instagram Reels.*
 
-**X Studio:** current-news research through your existing ChatGPT browser, English posts with real media, football plus five category desks, keyword requests, review and recurring schedules. Open **X Studio** in the sidebar. [Setup, research and browser-publishing limitations](X_STUDIO.md).
+---
 
-**IShowSpeed Studio:** open **Speed Studio** in the web sidebar or send `/speedclip YOUTUBE_URL` for dedicated 6–60 second English clips with event-aware selection, restrained CC0 sound effects and reaction emphasis. Normal clipping now defaults to English-script captions and hooks (Hindi → Hinglish). [Feature guide and research](SPEED_STUDIO.md).
+## Table of Contents
 
-**Your private Telegram clip studio, built in Python.** Send a long video, review a ranked shortlist, and receive captioned vertical clips.
+- [Overview & What CLIPER Does](#overview--what-cliper-does)
+- [System Architecture & Pipeline Flow](#system-architecture--pipeline-flow)
+- [Key Features & Upgrades](#key-features--upgrades)
+  - [1. Native YouTube Shorts Publishing & Auto-Scheduling](#1-native-youtube-shorts-publishing--auto-scheduling)
+  - [2. Modern Web Studio Workspace](#2-modern-web-studio-workspace)
+  - [3. Zero-Cost Browser Automation (No API Key Required)](#3-zero-cost-browser-automation-no-api-key-required)
+  - [4. IShowSpeed Studio & Energy Detection](#4-ishowspeed-studio--energy-detection)
+  - [5. X (Twitter) News Research & Drafting Studio](#5-x-twitter-news-research--drafting-studio)
+  - [6. Faceless 5-Niche Instagram Carousels](#6-faceless-5-niche-instagram-carousels)
+  - [7. Next-Gen Editing Pipeline (1080p @ 60fps, YuNet, NVENC)](#7-next-gen-editing-pipeline-1080p--60fps-yunet-nvenc)
+  - [8. Curated 64-Track Music Library & Dynamic Speech Ducking](#8-curated-64-track-music-library--dynamic-speech-ducking)
+  - [9. Unified AI Prompt Registry](#9-unified-ai-prompt-registry)
+- [Quick Start on Windows](#quick-start-on-windows)
+  - [Hardware & Software Prerequisites](#hardware--software-prerequisites)
+  - [Option A: Launch Web Studio (1-Click)](#option-a-launch-web-studio-1-click)
+  - [Option B: Launch Private Telegram Bot](#option-b-launch-private-telegram-bot)
+  - [Option C: Render a Local Demo (No Credentials Needed)](#option-c-render-a-local-demo-no-credentials-needed)
+  - [System Health Check (`cliper doctor`)](#system-health-check-cliper-doctor)
+- [Web Studio Guide](#web-studio-guide)
+  - [Project Dashboard & Intake](#project-dashboard--intake)
+  - [Interactive Clip Editor](#interactive-clip-editor)
+  - [Batch "Schedule All" to YouTube with Live-Clip Skipping](#batch-schedule-all-to-youtube-with-live-clip-skipping)
+  - [Mobile & Tablet Access over Local Network](#mobile--tablet-access-over-local-network)
+  - [Studio Keyboard Shortcuts](#studio-keyboard-shortcuts)
+- [Publishing & Distribution Hub](#publishing--distribution-hub)
+  - [YouTube Data API v3 Multi-Account Setup](#youtube-data-api-v3-multi-account-setup)
+  - [Native YouTube Scheduled Uploads (`publishAt`)](#native-youtube-scheduled-uploads-publishat)
+  - [Instagram Graph API Setup (Reels & Carousels)](#instagram-graph-api-setup-reels--carousels)
+  - [Public Media Staging Server](#public-media-staging-server)
+  - [Publishing Queue Lifecycle](#publishing-queue-lifecycle)
+- [AI Providers & Selection Engines](#ai-providers--selection-engines)
+  - [Zero-Cost Website Adapters (ChatGPT & Gemini)](#zero-cost-website-adapters-chatgpt--gemini)
+  - [Official API Providers (OpenAI, xAI Grok, Gemini API)](#official-api-providers-openai-xai-grok-gemini-api)
+  - [Offline Heuristic Engine](#offline-heuristic-engine)
+  - [Dynamic Provider Hot-Switching](#dynamic-provider-hot-switching)
+- [Editing Pipeline & Video Engineering](#editing-pipeline--video-engineering)
+  - [Layouts: Square Hook vs. Full Vertical](#layouts-square-hook-vs-full-vertical)
+  - [Smart Face Tracking (OpenCV YuNet)](#smart-face-tracking-opencv-yunet)
+  - [Whisper Word Timestamps & Subtitle Typography](#whisper-word-timestamps--subtitle-typography)
+  - [Language Modes & Romanization (Hinglish)](#language-modes--romanization-hinglish)
+  - [Color Grading & HDR-to-SDR Tone Mapping](#color-grading--hdr-to-sdr-tone-mapping)
+  - [Hardware Acceleration (NVIDIA NVENC & CUDA)](#hardware-acceleration-nvidia-nvenc--cuda)
+  - [Dual Export Architecture (Master vs. Telegram Compact)](#dual-export-architecture-master-vs-telegram-compact)
+- [Music Library & Audio Processing](#music-library--audio-processing)
+  - [The 64-Track Royalty-Free Catalog](#the-64-track-royalty-free-catalog)
+  - [Automated Speech Ducking & EBU R128 Loudness](#automated-speech-ducking--ebu-r128-loudness)
+  - [Custom Track Uploads](#custom-track-uploads)
+- [CLI & Script Reference](#cli--script-reference)
+- [Telegram Bot Commands](#telegram-bot-commands)
+- [Configuration Reference (`.env` & `config/`)](#configuration-reference-env--config)
+- [Troubleshooting & FAQ](#troubleshooting--faq)
+- [Repository Map](#repository-map)
 
-**New web Studio:** double-click `studio.bat` for the complete local workspace: clip review and editing, carousel creation, publishing approvals and schedules, category music, provider switching and engine controls. Open [the local studio](http://127.0.0.1:8788) while it is running. Read the [web setup and operating guide](WEB_STUDIO.md).
+---
 
-**New: square clips with hook titles, category music, Instagram publishing and five-niche faceless carousels.** See [Feature 1 / Feature 2 setup and Telegram controls](FEATURES.md) for local account configuration, character images and scheduling.
+## Overview & What CLIPER Does
 
-**Studio upgrade:** grounded hook alternatives, face-aware square cropping, caption timing correction, speech ducking, technical quality checks, stronger carousel scripts and image review, and safer publishing retries. Read the [research and evidence](RESEARCH_AND_UPGRADE.md) and [upgrade guide](UPGRADE_GUIDE.md).
+**CLIPER** is an end-to-end autonomous content creation suite engineered for creators, clipping agencies, and faceless media operators. It transforms hours of unstructured video content into polished, engaging short-form assets formatted for **YouTube Shorts**, **Instagram Reels**, and **TikTok**, and publishes them on your terms.
 
-**Long-stream upgrade:** normal clipping accepts Kick, Twitch and ten other platform groups. Captions-first indexing and budgeted audio scans support sources up to 24 hours without requiring complete downloads/transcription. YuNet tracking, normalized BGM and resumable scan windows improve editing and efficiency. Read the [research, architecture and scan controls](LONG_STREAM_ARCHITECTURE.md). Partial scans can miss highlights.
+### Core Capabilities
 
-**Clipping using Gemini:** send `/geminiclip YOUTUBE_URL`, or select **Clipping using Gemini** in `/start` and paste a YouTube link. Gemini's saved Chromium session selects ranges, hooks and timed captions directly from the link. Only selected ranges are downloaded. No Gemini API key is used; website account limits apply. See [Gemini clipping setup and modes](FEATURES.md#clipping-using-gemini).
+- **Intelligent Long-Stream & VOD Clipping**: Ingests videos from **YouTube, Twitch, Kick, Vimeo, Facebook, Instagram, TikTok, X/Twitter, Dailymotion, Rumble, Bilibili, and Odysee**, or local files. Handles broadcasts up to **24 hours** using captions-first indexing and bounded audio-window discovery without downloading multi-gigabyte source files.
+- **Direct Multi-Account YouTube Publishing**: Connect multiple YouTube channels via OAuth 2.0, publish immediately, or schedule an entire batch of clips directly on YouTube with automatic spacing (e.g., every 2 hours) using native YouTube server-side scheduling (`publishAt`). Smart detection automatically skips clips already live on YouTube.
+- **Direct Instagram Publishing**: Official Meta Graph API integration supporting multiple accounts for both video Reels (Feature 1) and multi-slide Carousels (Feature 2).
+- **Zero-API-Cost Browser Operation**: Features built-in Playwright automation for **ChatGPT Web** (for narrative analysis, candidate discovery, and critique) and **Google Gemini Web** (for direct YouTube link selection and carousel slide image rendering) — zero API charges, zero API keys required.
+- **Pro-Grade Production Standards**: Exports **1080×1920 at 60 fps** using NVIDIA NVENC hardware acceleration, OpenCV YuNet neural face tracking, EBU R128 loudness normalization, automatic background music ducking beneath speech, custom font rendering, and pixel-fitted animated captions.
+- **Multi-Script & Romanization Engine**: Automatically transliterates non-Latin spoken languages into clean Latin characters (e.g., Hindi speech into readable Hinglish) while preserving spoken audio and verbatim timestamps.
+- **Two Complete Operating Environments**:
+  - **Local Web Studio**: A responsive React 19 + TypeScript + Vite workspace (`http://127.0.0.1:8788`) with live video playback, millisecond-precision trimming, hook headline tuning, prompt editing, and publishing queues.
+  - **Private Telegram Bot**: An encrypted remote-control studio with inline button dashboards, interactive approvals, job monitoring, and subtitle/edit-data exports.
+
+---
+
+## System Architecture & Pipeline Flow
 
 ```text
-Telegram link / video upload
-  → persistent SQLite queue
-  → metadata + caption index, or bounded audio-window downloads (video links)
-  → one local CUDA model load for missing discovery windows
-  → observed context → candidate discovery → editorial critique
-  → duration validation + overlap / repeated-text removal
-  → choose all, top 3, or custom clips
-  → download selected video ranges + correct word timestamps locally
-  → square video on black vertical canvas + white hook title
-  → FFmpeg captions + category music at 20% + NVENC H.264/AAC export
-  → complete decode / resolution / duration / size / audio checks
-  → Telegram delivery + downloadable subtitles and edit metadata
-  → Instagram approval or automatic publishing (2-hour clip spacing)
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   SOURCE INGESTION                                     │
+│  Public URL (YouTube, Twitch, Kick, etc.) OR Local File Upload (Web Studio / Telegram) │
+└──────────────────────────────────────────┬─────────────────────────────────────────────┘
+                                           │
+                                           ▼
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                              DISCOVERY & TIMELINE SCAN                                 │
+│  - Video Links: Captions-first indexing OR Bounded audio windows (6–1440 min budget)  │
+│  - Gemini Browser: Direct link analysis in Chromium session (No video download needed) │
+│  - Missing Windows: Shared local CUDA Whisper model pass                               │
+└──────────────────────────────────────────┬─────────────────────────────────────────────┘
+                                           │
+                                           ▼
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                         AI SELECTION & EDITORIAL CRITIQUE                              │
+│  Provider: ChatGPT Browser | Google Gemini | xAI Grok | OpenAI | Heuristic             │
+│  - Narrative Summarization → Candidate Moment Discovery → Editorial Critique          │
+│  - Evaluates: Hook (25%), Payoff (25%), Standalone Clarity (25%), Emotion (10%), Use (15%)│
+│  - Grounded Hook Generation + Deduplication + Timestamp Boundary Refinement            │
+└──────────────────────────────────────────┬─────────────────────────────────────────────┘
+                                           │
+                                           ▼
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                            TARGETED RANGE EXTRACTION                                   │
+│  - Downloads ONLY the selected video & audio ranges (saves bandwidth & disk space)     │
+│  - Local faster-whisper CUDA pass for precise word-level subtitle alignment            │
+│  - Language Processing: Romanization (Hinglish/Latin) OR AI English Translation        │
+└──────────────────────────────────────────┬─────────────────────────────────────────────┘
+                                           │
+                                           ▼
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                              STUDIO VIDEO RENDERING                                    │
+│  - Layout: 1080x1080 Square Video on 1080x1920 Canvas (9:16) with Bold White Hook     │
+│  - Face Tracking: OpenCV YuNet samples faces @ 2 fps with smoothing & deadband hold    │
+│  - Subtitles: ASS word-level highlights (Mint Studio, Yellow Bold, or White Minimal)   │
+│  - Audio: 64-track Mood Library, 20% gain, automated speech ducking, EBU R128 norm     │
+│  - Video Engine: H.264 NVENC P6/HQ CQ19 @ 60 fps + HDR-to-SDR BT.709 Tone Mapping     │
+└──────────────────────────────────────────┬─────────────────────────────────────────────┘
+                                           │
+                                           ▼
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                          TECHNICAL QUALITY ASSURANCE (QA)                              │
+│  - Full file decode verification, dimension checks, audio presence, silence detection   │
+│  - Dual Export: High-Quality Master (unconstrained) + Telegram Compact delivery copy   │
+└──────────────────────────────────────────┬─────────────────────────────────────────────┘
+                                           │
+                                           ▼
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                        DISTRIBUTION & MULTI-ACCOUNT PUBLISHING                         │
+│  - YouTube Shorts: Instant upload OR direct scheduled release via native publishAt     │
+│  - Instagram Reels: Automated spacing (2h gap) OR manual approval inbox                │
+│  - Telegram Delivery: Video clip + downloadable SRT/ASS + edit-metadata ZIP            │
+└────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Start on this Windows computer
+---
 
-The project virtual environment and dependencies have already been installed in `.venv`.
+## Key Features & Upgrades
 
-ChatGPT, Gemini images and Gemini clipping reuse the project's existing saved Chromium profile at `data/browsers/chatgpt-profile`. Gemini clipping does not require another browser profile or an API key.
+### 1. Native YouTube Shorts Publishing & Auto-Scheduling
 
-1. Open `.env` in this project. Add your **`TELEGRAM_BOT_TOKEN`** from [@BotFather](https://t.me/BotFather). For no API key, choose **`AI_PROVIDER=chatgpt_browser`** and follow the ChatGPT browser setup below. Alternatively, choose an API provider and add its `OPENAI_API_KEY`, `XAI_API_KEY`, or `GEMINI_API_KEY` locally.
+- **Official YouTube Data API v3 Integration**: Authenticate and publish directly to YouTube Shorts without third-party services.
+- **Multi-Account OAuth Management**: Configure multiple YouTube channel profiles (e.g. `main`, `gaming`, `podcast`, `clips`) in `config/youtube.json`. Authorize accounts via an in-browser OAuth popup (`/api/youtube/auth-url` → `/api/youtube/callback`) or via CLI (`scripts/youtube-auth.ps1`).
+- **Channel Dashboard & Profile Fetching**: Automatically pulls channel avatars, verified titles, subscriber counts, and video counts.
+- **Batch "Schedule All" with Custom Gaps**: Schedule an entire project's rendered clips in one click. Define spacing intervals (e.g., 2 hours, 4 hours) and choose:
+  - **Direct YouTube Scheduling**: Uploads immediately with `privacyStatus: private` and an RFC 3339 `publishAt` timestamp. YouTube automatically switches the Short to public at the scheduled moment!
+  - **Local Queued Scheduling**: Holds videos in CLIPER's persistent SQLite publication queue and uploads when due.
+- **Smart Live-Clip Detection**: The scheduler checks previously published records and **automatically skips clips that are already live on YouTube**, preventing duplicate uploads and conserving your daily YouTube API quota.
+- **Automatic Hashtag Optimization**: Automatically injects `#Shorts`, `#Viral`, and `#Clips` into titles and descriptions if not already present.
+
+### 2. Modern Web Studio Workspace
+
+- **Built with Modern Web Standards**: React 19, TypeScript, Vite, TanStack Query, Radix Dialog, Lucide icons, and a custom CSS design system with sleek dark mode aesthetics.
+- **Comprehensive Project Inspection**:
+  - Synchronized video player with seeker and poster preview.
+  - Interactive clip trimmer: modify start/end timestamps down to milliseconds.
+  - Live hook headline editor and caption/hashtag modifier.
+  - Niche and music category overrides per clip.
+  - Full transcript viewer with word-level confidence metrics and search.
+  - Visual scan coverage map displaying analyzed stream segments.
+- **Network Accessibility**: Binds to `0.0.0.0:8788` by default so you can access the studio from your smartphone, iPad, or laptop on the same local Wi-Fi network. Protected by CSRF tokens, session cookies, and private launch keys.
+
+### 3. Zero-Cost Browser Automation (No API Key Required)
+
+- **ChatGPT Website Adapter (`chatgpt_browser`)**: Uses Playwright and an isolated Chromium profile (`data/browsers/chatgpt-profile`). Sends transcripts to ChatGPT Web, extracts structured JSON, auto-repairs schemas via `json_repair`, and returns approved candidate moments — with **$0 in API charges**.
+- **Gemini Website Browser Clipping (`gemini_browser`)**: Ingests YouTube URLs directly through Google Gemini Web. Gemini analyzes the video directly without requiring local downloads. Clips, hooks, ratings, and timed phrases are extracted seamlessly.
+
+### 4. IShowSpeed Studio & Energy Detection
+
+- **Dedicated High-Energy Workflow**: Tailored for streaming icons like IShowSpeed, Kai Cenat, and gaming broadcasts.
+- **Tight Duration Bounds**: Optimized for complete 6–60 second moments.
+- **Audio Energy Envelope Analysis**: Measures audio volume in 100 ms windows to locate emotional peaks, loud reactions, and surprise triggers.
+- **Subtle Reaction Zoom & SFX Accents**: Automatically inserts CC0-licensed sound effects (reaction, reveal, transition from Kenney's interface sound library) and applies a smooth 6% punch-in zoom for 0.65s near detected energy peaks.
+- **Emotional Sincerity Guard**: Suppresses comedic sound effects and zooms on genuine, wholesome, or emotional moments.
+
+### 5. X (Twitter) News Research & Drafting Studio
+
+- **6 Conversation Desks**: Football, AI & Technology, Gaming & Esports, Movies & TV, Music, Business & Finance.
+- **Real-Time Fact Sourcing**: ChatGPT Web browses the live internet, finds two independent source links, extracts dates, checks latest developments, and flags factual uncertainty.
+- **Wikimedia Commons CC0 Photo Integration**: Automatically searches public-domain photographs, checks image dimensions, and downloads compliant media.
+- **Owned Media Library**: Upload and tag your own images/videos for each category desk.
+- **Compliance Guard**: Strictly adheres to 280-weighted-character limits and duplicate-post prevention rules.
+
+### 6. Faceless 5-Niche Instagram Carousels
+
+- **5 Pre-Configured Niches**: Dark / Stoicism, Men's Growth, Money & Business, Tech / AI, Personal Finance.
+- **Split-Scene Visual Architecture**: Each 1080×1350 slide features a vertically stacked contrast pair (Top: Problem/Sacrifice, Bottom: Reward/Transformation).
+- **Consistent Character Art**: Uses Google Gemini Web + Playwright to generate slide illustrations featuring your custom character reference image.
+- **Automated Visual QA**: Gemini transcribes text from the generated images to verify spelling, currency symbols, and numbers against the editorial plan. Defective slides trigger an automatic re-render attempt.
+- **Swipe Overlay & Packaging**: Adds subtle swipe-left indicators to all slides except the finale.
+
+### 7. Next-Gen Editing Pipeline (1080p @ 60fps, YuNet, NVENC)
+
+- **Master Output Standard**: 1080×1920 vertical canvas at a smooth 60 fps.
+- **Layout Precision (`square_hook`)**: Centers a 1080×1080 video on the 9:16 canvas. The hook title is mathematically positioned immediately above the video frame, with pixel-measured margins.
+- **YuNet Neural Face Tracking**: OpenCV YuNet tracks speaker faces twice per second, applying deadband smoothing, dropout hold, and scene-cut resets to ensure the subject remains centered.
+- **Wide-Group Preservation**: Optional setting to prevent aggressive cropping when multiple speakers or interview guests are on screen.
+- **Color Grading & Tone Mapping**: Built-in Natural and Vivid color grades, plus automatic HDR (PQ/HLG) to SDR BT.709 tone mapping.
+- **Hardware Acceleration**: High-performance NVIDIA NVENC H.264 encoding with lookahead and adaptive quantization, paired with CUDA-accelerated `faster-whisper`. CPU fallback (`libx264`) available for all platforms.
+
+### 8. Curated 64-Track Music Library & Dynamic Speech Ducking
+
+- **64 Royalty-Free Background Tracks**: Organized across 6 mood categories:
+  - `Energetic - Hype` (Drift Phonk, Brazilian Phonk, Memphis Phonk, Sigma male themes, High-energy EDM, Bluegrass country)
+  - `Chill - Ambient` (Lo-Fi Jazz Lounge, Acoustic Pop, Elevator meme, chill vlog)
+  - `Cinematic - Epic`
+  - `Emotional - Sad`
+  - `Suspense - Thriller`
+  - `Phonk`
+- **Dynamic Speech Ducking**: Automatically ducks background music volume beneath spoken dialogue, restoring music level during pauses.
+- **EBU R128 Loudness Compliance**: Mixes speech and music with `loudnorm=I=-16:TP=-1.5` so audio sounds clear and punchy on mobile speakers.
+- **Custom Uploads**: Upload MP3, WAV, M4A, or FLAC tracks directly in Web Studio.
+
+### 9. Unified AI Prompt Registry
+
+- Centralized prompt registry in `cliper/prompts.py` and `config/prompts.json`.
+- Customizable system prompts with live reset buttons for:
+  - Carousel Planning & Narrative Design
+  - Carousel 10 Core Design Rules
+  - Slide Image Generation Prompt Template
+  - Slide Quality Critique & Verification
+  - Short-Form Video Clipping Editorial Brief
+  - Gemini Direct Video Analysis Prompt
+  - Transcript Context Summarization
+  - Clip Candidate Critique & Boundary Repair
+  - Speed Livestream Editor Brief
+  - X Real-Time Research Prompt
+  - X Post Drafting Prompt
+  - Display Language & Romanization Rules
+
+---
+
+## Quick Start on Windows
+
+### Hardware & Software Prerequisites
+
+| Component | Recommended (This Environment) | Minimum / CPU-Only |
+|---|---|---|
+| **OS** | Windows 11 / 10 (64-bit) | Windows, Linux (Ubuntu 22.04+), macOS |
+| **Python** | Python 3.11 – 3.13 (Installed in `.venv`) | Python 3.11+ |
+| **Node.js** | Node.js 22 LTS or 24 LTS | Node.js 20+ (Required for yt-dlp & Web Studio) |
+| **GPU** | NVIDIA RTX 4060 (8 GB VRAM) | Any NVIDIA GPU with 4GB+ VRAM, or CPU |
+| **FFmpeg** | FFmpeg with `h264_nvenc`, `libass`, `loudnorm` | System FFmpeg or bundled imageio-ffmpeg |
+| **Storage** | 10 GB+ free disk space | 3 GB free disk space |
+
+### Option A: Launch Web Studio (1-Click)
+
+Double-click `studio.bat` in the project root, or run in PowerShell:
+
+```powershell
+.\scripts\start-web.ps1
+```
+
+1. The terminal will start the FastAPI backend and serve the compiled React frontend at `http://127.0.0.1:8788`.
+2. Your default browser will open automatically with your local authenticated launch key.
+3. Access from any device on your Wi-Fi by visiting `http://<YOUR-PC-IP>:8788/#key=...`.
+
+### Option B: Launch Private Telegram Bot
+
+1. Open `.env` and paste your Telegram Bot Token from [@BotFather](https://t.me/BotFather):
+   ```dotenv
+   TELEGRAM_BOT_TOKEN=123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ
+   ```
 2. Start the bot:
-
    ```powershell
    .\scripts\start.ps1
    ```
+3. Open Telegram, find your bot, and send `/whoami`.
+4. Copy your numeric user ID, paste it into `ALLOWED_USER_IDS` in `.env`:
+   ```dotenv
+   ALLOWED_USER_IDS=987654321
+   ```
+5. Restart `scripts/start.ps1`. Send `/start` to access the full interactive dashboard!
 
-3. Message your bot `/whoami`. Put that numeric ID in **`ALLOWED_USER_IDS`**, then stop with Ctrl+C and start again. Until you set the allowlist, only `/whoami` is available.
-4. Send `/start`, then a supported video URL. Choose clips from the shortlist. Leave this terminal running while it processes jobs.
+### Option C: Render a Local Demo (No Credentials Needed)
 
-You can get your user ID from an existing trusted source and fill all three values before the first start. Keep secrets in `.env`; it is excluded from Git and Docker builds.
-
-Check setup without contacting any service:
-
-```powershell
-.\.venv\Scripts\python.exe -m cliper doctor
-```
-
-Add `--online` to verify the bot token and whether the configured AI model is visible to your account. It does not generate clips or validate a paid inference call. Exit code `2` means setup is incomplete.
-
-## Try it without credentials
+Test the rendering engine, Whisper model, and NVENC encoder with synthetic speech and studio graphics:
 
 ```powershell
 .\scripts\demo.ps1
 ```
 
-This creates a **1080×1920 spoken clip** and `preview.png` in `data/demo/<run>/`. It uses a designed studio card, system-generated speech, real Whisper word timestamps and your configured video encoder. On this machine, transcription uses CUDA and export uses the RTX 4060 NVENC encoder. The first run may download the configured Whisper model. Selection uses basic offline ranking; the sample is not a benchmark of virality or paid AI selection.
+This generates a full 1080×1920 video at `data/demo/<run>/` with real Whisper timestamps, custom fonts, and audio normalization.
 
-Windows uses its installed English speech voice. On Linux, install `espeak-ng`, or supply a local 15–30 second speech recording with `python -m cliper demo --audio 'path/to/speech.wav'`. Use `--width 720` for a smaller export. The old colored bars and test tone are available only through `python -m cliper demo --diagnostic --width 360`; these are intentional diagnostic footage, not broken video.
+### System Health Check (`cliper doctor`)
 
-To process a real local video with local transcription and basic ranking, set `AI_PROVIDER=heuristic` in `.env`, then:
-
-```powershell
-.\.venv\Scripts\python.exe -m cliper run 'C:\Videos\podcast.mp4' --clips 5 --min-seconds 30 --max-seconds 60
-```
-
-For stronger contextual selection, choose OpenAI, xAI Grok, or Google Gemini with the matching API key. All three use available transcript context, candidate discovery and editorial critique. Long-stream analysis reports the ranges it examined. There is no automatic provider fallback when a call fails.
-
-## Switch AI providers
-
-### ChatGPT website with no API key
-
-The experimental `chatgpt_browser` provider uses Python Playwright and a dedicated Chromium profile to send prompts to `https://chatgpt.com/`, read completed replies, validate JSON and pass approved segment IDs to the normal renderer. It performs source summarization, candidate discovery and editorial review through the website. Transcription and NVENC encoding keep using your local GPU settings.
+Verify your environment, FFmpeg filters, CUDA libraries, and AI configuration without contacting external services:
 
 ```powershell
-.\scripts\setup-browser.ps1
-.\scripts\chatgpt-login.ps1
-# Sign in yourself, wait for the chat page, then close the Chromium window.
-.\.venv\Scripts\python.exe -m cliper browser-check
+.\.venv\Scripts\python.exe -m cliper doctor
 ```
 
-Select `/provider chatgpt` in Telegram, or set `AI_PROVIDER=chatgpt_browser` in `.env` and restart the bot. Local processing also supports `python -m cliper run 'C:\Videos\podcast.mp4' --provider chatgpt`. Aliases: `chatgpt`, `browser`, `chatgpt_browser`. Existing jobs retain their original provider; submit a new video to use this selection.
+Add `--online` to verify API keys and Telegram credentials:
 
-There are **no API charges or API keys** for this provider. ChatGPT's Free plan and current account limits still apply ([official Free Tier FAQ](https://help.openai.com/en/articles/9275245-using-chatgpt-s-free-tier-faq)). This is a website adapter, so UI changes or account verification can interrupt it. It uses the model available in the website session; `website-session` in metadata is not a claim about a particular model. It never switches to a paid API automatically.
+```powershell
+.\.venv\Scripts\python.exe -m cliper doctor --online
+```
 
-The browser opens visibly by default. Keep the desktop session available while it works. `CHATGPT_BROWSER_TIMEOUT=240` bounds each response; `CHATGPT_BROWSER_MAX_CHARS=60000` bounds each outgoing prompt. Long transcripts are summarized in sections. Set `CHATGPT_BROWSER_HEADLESS=true` only after verifying the saved session works. Login always opens visibly. The standard Docker image does not install browser support; use this local Windows setup.
+---
 
-Sessions are stored in `data/browsers/chatgpt-profile/`, excluded from Git. Prompts become website conversations under your account's ChatGPT data settings. Do not share the profile directory. CLIPER never imports your everyday browser cookies, enters your password, bypasses verification or works around account limits. When login expires or a limit is reached, complete any required website action yourself and use `/retry JOB`. If a completed reply is malformed, one schema repair is attempted; partial replies and mismatched request IDs are rejected. No raw browser replies or cookies are written to application logs.
+## Web Studio Guide
 
-For entirely offline operation without a website account, `/provider heuristic` remains available with basic ranking.
+Open **CLIPER Studio** at `http://127.0.0.1:8788` (or double-click `studio.bat`).
 
-### API providers
+```text
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│  cliper.  │  Studio  │  Speed Studio  │  X Studio  │  Carousels  │  Publishing  │ ⚙   │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                        │
+│  [ + New Project ]   [ Search (Ctrl+K) ]            Engine: [ Active ]  GPU: [ RTX 4060]│
+│                                                                                        │
+│  PROJECT WORKSPACE: "Joe Rogan Podcast #2100"                                         │
+│  ┌───────────────────────┬──────────────────────────────────────────────────────────┐  │
+│  │ SHORTLIST (5 Moments) │  VIDEO PREVIEW (1080x1920 @ 60fps)                       │  │
+│  │ --------------------- │  ┌────────────────────────────────────────────────────┐  │  │
+│  │ [✓] 01. AI Singularity│  │  WHITE HOOK TITLE PLACED ABOVE SQUARE VIDEO        │  │  │
+│  │     04:12 - 04:58 (92)│  │  ┌──────────────────────────────────────────────┐ │  │  │
+│  │                       │  │  │                                              │ │  │  │
+│  │ [✓] 02. Quantum Leap  │  │  │           1080x1080 SQUARE VIDEO             │ │  │  │
+│  │     12:30 - 13:15 (88)│  │  │           (YuNet Face-Tracked)               │ │  │  │
+│  │                       │  │  │                                              │ │  │  │
+│  │ [✓] 03. Brain Computer│  │  └──────────────────────────────────────────────┘ │  │  │
+│  │     25:10 - 25:55 (85)│  │       MINT/YELLOW WORD-HIGHLIGHTED SUBTITLES      │  │  │
+│  │                       │  └────────────────────────────────────────────────────┘  │  │
+│  │ [Schedule All (3)]    │  [ Live Trim ]  [ Hook Editor ]  [ Subtitle Style ]       │  │
+│  │ [Render Selected]     │  [ Music: Phonk (20%) ]  [ Publish to YouTube Shorts ]   │  │
+│  └───────────────────────┴──────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
 
-Add the keys for the providers you want to use to the local `.env`:
+### Project Dashboard & Intake
+
+- Click **New Project** or press **N**.
+- Paste a URL (YouTube, Twitch VOD, Kick, etc.) or drag-and-drop a local video file.
+- Configure:
+  - **AI Provider**: ChatGPT Browser, Gemini Web, OpenAI, xAI Grok, Gemini API, or Heuristic.
+  - **Clipping Route**: Gemini Browser (direct link analysis) vs. Audio-First (Whisper scanner).
+  - **Discovery Budget**: 6 to 1440 minutes.
+  - **Focus Timestamps**: Prioritize specific moments (e.g., `00:15:30 01:45:00`).
+  - **Requested Clips & Duration**: e.g., 5 clips between 30 and 60 seconds.
+
+### Interactive Clip Editor
+
+- **Video Stage**: Live preview of rendered MP4s with playback controls.
+- **Waveform & Trimmer**: Fine-tune clip start and end timestamps down to 100 ms precision.
+- **Grounded Hook Editor**: Edit the title that appears above the video. Choose between curiosity, contrast, or direct hook styles.
+- **Caption & Subtitle Panel**: Modify transcript text and regenerate ASS/SRT cues.
+- **Music Selector**: Assign a specific category (`Phonk`, `Chill - Ambient`, `Cinematic - Epic`) or select a specific track from the library.
+- **Direct Publish Button**: Click "Publish" on any rendered clip to push directly to YouTube Shorts or Instagram Reels.
+
+### Batch "Schedule All" to YouTube with Live-Clip Skipping
+
+In the project view, click the **Schedule all** button:
+
+1. **Target Platform**: Select **YouTube**.
+2. **Channel Account**: Choose your authorized YouTube account (e.g. `main` or `gaming`).
+3. **Posting Interval**: Choose the gap between releases (default: **2 hours**; supports any value from 0.5 to 72 hours).
+4. **Publish First Now**: Toggle whether clip #1 goes live immediately or starts after the interval.
+5. **Direct YouTube Scheduling**: When enabled, CLIPER uploads all clips directly to YouTube with `privacyStatus: private` and calculated `publishAt` timestamps.
+6. **Smart Live-Clip Filter**: The modal displays how many clips are eligible and automatically excludes clips already marked `published` on YouTube.
+
+### Mobile & Tablet Access over Local Network
+
+CLIPER Web Studio binds to `0.0.0.0` by default. To control your studio from your phone or tablet:
+1. Find your computer's local IP address (e.g., `192.168.1.50`).
+2. Copy the full launch URL with your key from `data/web/access-key`:
+   ```text
+   http://192.168.1.50:8788/#key=YOUR_ACCESS_KEY
+   ```
+3. Open the URL in Safari, Chrome, or any mobile browser. You get full control over video generation, review, and scheduling from your phone!
+
+### Studio Keyboard Shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `Ctrl + K` / `Cmd + K` | Open global project search and navigation palette |
+| `N` | Open "New Project" modal |
+| `?` | Show keyboard shortcuts and documentation help |
+| `Escape` | Close any open modal or drawer |
+
+---
+
+## Publishing & Distribution Hub
+
+### YouTube Data API v3 Multi-Account Setup
+
+1. **Create Google Cloud Credentials**:
+   - Go to the [Google Cloud Console](https://console.cloud.google.com/).
+   - Create a project and enable the **YouTube Data API v3**.
+   - Navigate to **APIs & Services > Credentials** and create an **OAuth 2.0 Client ID** (Application type: **Web application**).
+   - Add Authorized redirect URIs:
+     ```text
+     http://127.0.0.1:8788/api/youtube/callback
+     http://localhost:8788/api/youtube/callback
+     ```
+2. **Save Client ID & Secret**:
+   - In Web Studio, open **Settings > Connections > YouTube**.
+   - Enter your **Client ID** and **Client Secret**, then click **Save Google OAuth Credentials**.
+   - Alternatively, add them to `.env`:
+     ```dotenv
+     YOUTUBE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+     YOUTUBE_CLIENT_SECRET=your-client-secret
+     ```
+3. **Authorize Channels**:
+   - In Web Studio, click **+ Add YouTube Account**. Enter an account key (e.g., `main`, `gaming`, `shorts`).
+   - Click **Authorize Channel**. A Google sign-in window will open. Grant permission and the channel will immediately show up as **Connected** with its title, avatar, and subscriber count.
+   - Or authorize via PowerShell CLI:
+     ```powershell
+     .\scripts\youtube-auth.ps1 -Account main
+     ```
+
+### Native YouTube Scheduled Uploads (`publishAt`)
+
+When scheduling a clip on YouTube, CLIPER leverages YouTube's native server-side scheduler:
+- The video file is uploaded immediately via resumable chunked upload (4 MiB chunks).
+- The video's `privacyStatus` is set to `private`.
+- The `publishAt` parameter is set to the target UTC timestamp formatted in RFC 3339 (e.g., `2026-10-26T18:00:00.000Z`).
+- YouTube's servers handle the public release automatically. Your local computer does not need to stay on at the moment of publication!
+
+### Instagram Graph API Setup (Reels & Carousels)
+
+1. Open `config/instagram.json`. Define your accounts:
+   ```json
+   {
+     "clips": {
+       "ig_user_id": "17841400000000000",
+       "token_env": "IG_CLIPS_TOKEN",
+       "login": "instagram",
+       "owners": [123456789]
+     }
+   }
+   ```
+2. Put the matching access token in `.env`:
+   ```dotenv
+   IG_CLIPS_TOKEN=EAA...
+   ```
+3. Configure `PUBLIC_MEDIA_BASE_URL` to point to your HTTPS reverse proxy serving staged assets.
+
+### Public Media Staging Server
+
+Instagram requires public HTTPS URLs to fetch video and carousel images. Run the lightweight media server:
+
+```powershell
+.\.venv\Scripts\python.exe -m cliper serve-media --host 127.0.0.1 --port 8787
+```
+
+Forward your HTTPS reverse proxy (e.g. Nginx, Cloudflare Tunnel, Caddy) to `127.0.0.1:8787`.
+
+### Publishing Queue Lifecycle
+
+- **Review Inbox ("Needs Your Eye")**: Shows items requiring manual approval. Click to view media, edit captions, and approve or reject.
+- **Scheduled Queue ("Up Next")**: Displays scheduled posts with countdowns and predecessor dependencies.
+- **Published History ("Out in the World")**: Complete log of published assets. YouTube Shorts include a clickable link: `https://www.youtube.com/shorts/<video_id>`.
+- **Uncertain State Guard**: If a network timeout occurs while waiting for confirmation from YouTube or Meta, the post is flagged as `uncertain`. CLIPER blocks automatic retries to prevent embarrassing duplicate posts.
+
+---
+
+## AI Providers & Selection Engines
+
+CLIPER supports hot-swapping between zero-cost website automation and official high-throughput APIs.
+
+```text
+┌───────────────────────┬─────────────────────────┬─────────────────────────┬─────────────────────┐
+│ AI Provider           │ Configuration           │ Setup Command           │ Cost / Limits       │
+├───────────────────────┼─────────────────────────┼─────────────────────────┼─────────────────────┤
+│ chatgpt_browser       │ Browser automation      │ .\scripts\chatgpt-login.ps1│ Free (ChatGPT Web)  │
+│ gemini_browser        │ Browser automation      │ .\scripts\gemini-login.ps1 │ Free (Gemini Web)   │
+│ openai                │ OPENAI_API_KEY          │ In .env or Web Studio   │ Paid API (Pay-as-go)│
+│ xai (grok)            │ XAI_API_KEY             │ In .env or Web Studio   │ Paid API (Pay-as-go)│
+│ gemini (api)          │ GEMINI_API_KEY          │ In .env or Web Studio   │ Paid API (Pay-as-go)│
+│ heuristic             │ Fully offline           │ None required           │ 100% Free / Local   │
+└───────────────────────┴─────────────────────────┴─────────────────────────┴─────────────────────┘
+```
+
+### Zero-Cost Website Adapters (ChatGPT & Gemini)
+
+- **ChatGPT Login**:
+  ```powershell
+  .\scripts\chatgpt-login.ps1
+  ```
+  A Chromium window opens using `data/browsers/chatgpt-profile`. Sign in to your account, wait for the chat screen, and close the window.
+- **Gemini Login**:
+  ```powershell
+  .\scripts\gemini-login.ps1
+  ```
+  Shares the same Chromium profile. Sign in once to enable Gemini browser clipping and carousel image rendering.
+- **Headless Mode**:
+  After verifying login, enable headless mode in `.env`:
+  ```dotenv
+  CHATGPT_BROWSER_HEADLESS=true
+  ```
+
+### Official API Providers (OpenAI, xAI Grok, Gemini API)
+
+Configure your keys in `.env`:
 
 ```dotenv
 AI_PROVIDER=xai
 
-OPENAI_API_KEY=
-OPENAI_MODEL=gpt-4.1-mini
-
-XAI_API_KEY=
+# xAI Grok
+XAI_API_KEY=xai-your-api-key
 XAI_MODEL=grok-4.6
 
-GEMINI_API_KEY=
+# Google Gemini API
+GEMINI_API_KEY=AIzaSy...
 GEMINI_MODEL=gemini-2.5-flash
+
+# OpenAI
+OPENAI_API_KEY=sk-proj-...
+OPENAI_MODEL=gpt-4.1-mini
 ```
 
-`AI_PROVIDER` accepts `openai`, `xai`, `gemini`, or `heuristic`; `grok` is an alias for `xai`. Only the chosen provider's key is required. An OpenAI key is **not** required for Grok or Gemini. Model names can be changed independently in the corresponding `*_MODEL` variable; select a model your account can access that supports structured output. Grok/Gemini requests currently use low reasoning effort and reserve an additional 4096 completion tokens for reasoning. Choose models supporting that effort setting. API costs depend on your provider and model.
+### Offline Heuristic Engine
 
-Restart the bot after changing `.env`. Once your keys are configured, switch instantly from your private Telegram chat:
+When no internet connection or AI provider is available, select `heuristic`:
+- Uses local speech volume, punctuation, and keyword cadence to rank candidate clips.
+- Runs 100% locally with zero external API calls.
 
-```text
-/provider grok
-/provider gemini
-/provider openai
-/provider heuristic
-```
+### Dynamic Provider Hot-Switching
 
-`/provider` shows the current choice, model and which providers have keys configured (never their values). `/provider default` removes your Telegram override and follows `AI_PROVIDER` again. The choice persists per owner across restarts. New jobs save the selected provider and model; changing preferences or environment defaults does not reroute jobs already submitted with a saved selection. Old jobs created before provider selection was added have no saved choice and use the environment default until reanalyzed; cached analysis keeps its recorded method.
+Switch AI models at any time without restarting:
+- **In Telegram**: `/provider grok`, `/provider gemini`, `/provider openai`, `/provider chatgpt`, `/provider heuristic`.
+- **In Web Studio**: Open **Settings > AI & discovery** and select the provider from the dropdown.
 
-To override the environment for one local run or setup check:
+---
 
-```powershell
-.\.venv\Scripts\python.exe -m cliper run 'C:\Videos\podcast.mp4' --provider gemini
-.\.venv\Scripts\python.exe -m cliper doctor --provider xai --online
-```
+## Editing Pipeline & Video Engineering
 
-OpenAI uses its Responses API. Grok and Gemini use their official OpenAI-compatible chat endpoints with JSON Schema and local Pydantic validation. The shared Python SDK sends Grok requests directly to `api.x.ai` and Gemini requests directly to `generativelanguage.googleapis.com`; using that SDK does not send their transcripts to OpenAI. [xAI structured output documentation](https://docs.x.ai/developers/model-capabilities/text/structured-outputs) and [Google's compatibility documentation](https://ai.google.dev/gemini-api/docs/openai) describe these interfaces.
+### Layouts: Square Hook vs. Full Vertical
 
-## Install on another machine
+1. **`square_hook` (Default & Recommended)**:
+   - Centers a **1080×1080 square video** on a **1080×1920 black canvas** (9:16).
+   - Places a **high-contrast bold white hook title** directly above the video frame.
+   - Displays animated subtitles within the lower third, staying clear of platform UI buttons.
+2. **`vertical_full`**:
+   - Crops source footage to full 9:16 vertical resolution (1080×1920).
+   - Ideal for single-subject vertical recordings or vlogs.
 
-Requires **Python 3.11–3.13**, disk space for source videos and speech models, and internet for the first model download. This workspace and `.env.example` use the RTX 4060 profile: Whisper `small`, CUDA `int8_float16`, and NVIDIA NVENC video encoding. For CPU-only machines, set `WHISPER_DEVICE=cpu`, `WHISPER_COMPUTE_TYPE=int8`, and `VIDEO_ENCODER=libx264` in `.env`.
+### Smart Face Tracking (OpenCV YuNet)
 
-Windows:
+- Employs the lightweight OpenCV YuNet neural network to detect faces at 2 fps.
+- **Deadband Smoothing**: Minor speaker head movements do not cause jittery pan movements.
+- **Dropout Hold**: If a face turns away briefly, the crop position holds steady.
+- **Scene-Cut Reset**: Instant recentering when camera angles change.
+- **Wide-Group Preservation**: Keeps multiple speakers framed together for podcast and interview setups.
 
-```powershell
-.\scripts\setup.ps1
-# On Windows with an NVIDIA GPU, install the CUDA libraries and save GPU settings:
-.\scripts\setup-gpu.ps1
-# If Python is not on PATH:
-.\scripts\setup.ps1 -PythonPath 'C:\Path\To\python.exe'
-```
+### Whisper Word Timestamps & Subtitle Typography
 
-Linux/macOS:
+- Subtitles are driven by word-level timestamps generated by `faster-whisper`.
+- Words are grouped into short, readable phrases (1–4 words).
+- **Three Styling Themes**:
+  - `studio`: Dark translucent pill background with mint cyan active-word highlight.
+  - `bold`: High-visibility yellow active-word highlight with black outline.
+  - `minimal`: Clean, unobtrusive white typography with drop shadow.
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e '.[transcribe,dev]'
-cp .env.example .env
-python -m cliper doctor
-python -m cliper bot
-```
+### Language Modes & Romanization (Hinglish)
 
-FFmpeg is resolved from `FFMPEG_PATH`, then PATH, then the `imageio-ffmpeg` packaged executable. It must include the selected encoder (`h264_nvenc` or `libx264`), AAC, `libass`, `boxblur`, and `loudnorm`. This project probes videos using OpenCV and FFmpeg, so a separate ffprobe is not required for its render checks. A complete system FFmpeg installation remains useful for downloader compatibility.
+In Web Studio Settings under **Hook & caption language**, choose:
+- **Romanized (Default)**: Keeps original spoken audio, but transliterates captions, titles, and hashtags into the Latin alphabet (e.g. Hindi `तुम कैसे हो` → `tum kaise ho`).
+- **English Translation**: Translates spoken dialogue into English phrases using your configured AI model.
+- **Original Script**: Preserves native Devanagari, Arabic, or Cyrillic characters.
 
-YouTube extraction can require **Node.js or Deno**. Install a current supported runtime on PATH. Node is explicitly enabled when found. Platform changes, region/account restrictions, or anti-bot checks can still cause download failures; update `yt-dlp[default]` and review its error. The bot does not bypass access restrictions. Use an uploaded file or local video if necessary.
+### Color Grading & HDR-to-SDR Tone Mapping
 
-## RTX 4060 / 8 GB GPU settings
+- **Natural**: Enhances contrast and adds subtle sharpness.
+- **Vivid**: Saturated, vibrant colors suited for gaming and lifestyle content.
+- **HDR Tone Mapping**: Automatically converts HDR10 (PQ) and HLG video into BT.709 SDR before grading, preventing washed-out colors.
 
-This computer is configured with:
+### Hardware Acceleration (NVIDIA NVENC & CUDA)
 
+Configured out-of-the-box for NVIDIA RTX GPUs:
 ```dotenv
 WHISPER_MODEL=small
 WHISPER_DEVICE=cuda
@@ -180,139 +582,286 @@ WHISPER_COMPUTE_TYPE=int8_float16
 GPU_DEVICE_INDEX=0
 VIDEO_ENCODER=h264_nvenc
 ```
+For CPU-only computers, set `WHISPER_DEVICE=cpu`, `WHISPER_COMPUTE_TYPE=int8`, and `VIDEO_ENCODER=libx264`.
 
-Whisper runs on CUDA and final H.264 export uses the RTX's NVENC encoder. Quantized weights and float16 computation reduce transcription memory use. The worker processes one job at a time; the Whisper subprocess exits before rendering, releasing its model memory. The configured `small` model is a conservative choice for this 8 GB card. Available VRAM still depends on other programs running on the GPU.
+### Dual Export Architecture (Master vs. Telegram Compact)
 
-The `gpu` installation extra supplies NVIDIA's CUDA 12 cuBLAS/runtime and cuDNN 9 wheels inside `.venv`. Windows DLL search paths are configured only for the running process; no driver replacement or system-wide PATH change is required. A sufficiently recent NVIDIA driver must already be installed. NVIDIA documents its [Windows cuDNN pip packages](https://docs.nvidia.com/deeplearning/cudnn/installation/latest/windows.html), and [faster-whisper documents its GPU library requirements](https://github.com/SYSTRAN/faster-whisper#gpu).
+- **High-Quality Master**: Rendered at up to 16 Mbps for pristine video fidelity. Used for Web Studio downloads, YouTube Shorts, and Instagram publishing.
+- **Telegram Compact Delivery**: If the master exceeds Telegram's cloud file size limit, a second optimized copy is produced automatically for fast delivery to your phone.
+
+---
+
+## Music Library & Audio Processing
+
+### The 64-Track Royalty-Free Catalog
+
+CLIPER includes 64 curated, royalty-free tracks located in `music/`:
+
+| Mood Category | Folder Path | Track Count | Style & Feel |
+|---|---|---|---|
+| **Energetic - Hype** | `music/Energetic - Hype` | 22 | Drift Phonk, Brazilian Phonk, Memphis Phonk, Sigma anthems, High-BPM EDM, Banjo swing |
+| **Chill - Ambient** | `music/Chill - Ambient` | 12 | Lo-Fi Jazz Lounge, Acoustic Pop, Elevator meme, chill vlog |
+| **Cinematic - Epic** | `music/Cinematic - Epic` | 9 | Orchestral builds, dramatic percussion, movie trailer climax |
+| **Emotional - Sad** | `music/Emotional - Sad` | 8 | Melancholic piano, gentle strings, reflective moments |
+| **Suspense - Thriller**| `music/Suspense - Thriller` | 7 | Dark ambient drones, rising tension, mystery cues |
+| **Phonk** | `music/Phonk` | 6 | Aggressive 808 bass, distorted cowbells, gym motivation |
+
+### Automated Speech Ducking & EBU R128 Loudness
+
+- **Dynamic Speech Ducking**: Music volume is continuously monitored and attenuated whenever dialogue is detected, ensuring spoken words remain 100% intelligible.
+- **EBU R128 Loudness Compliance**: The final mix passes through an FFmpeg `loudnorm` filter (`I=-16 LUFS, TP=-1.5 dBFS`) with a lookahead limiter to prevent clipping and distortion on smartphone speakers.
+
+### Custom Track Uploads
+
+- Drag-and-drop your own MP3, WAV, or AAC audio files into any category via Web Studio (**Music Library** tab).
+- Preview tracks in the browser with interactive play/pause controls.
+
+---
+
+## CLI & Script Reference
+
+### Command-Line Interface (`python -m cliper`)
 
 ```powershell
-# Already installed and configured in this workspace. For reinstalling:
-.\scripts\setup-gpu.ps1
-# Tests library loading, CUDA compute support, and an actual short NVENC encode:
-.\.venv\Scripts\python.exe -m cliper doctor
+# Open Web Studio
+python -m cliper web --port 8788 --open
+
+# Start Telegram Bot & Worker
+python -m cliper bot
+
+# Check system prerequisites and encoders
+python -m cliper doctor
+python -m cliper doctor --online --provider gemini
+
+# Process a local video file directly
+python -m cliper run "C:\Videos\podcast.mp4" --clips 5 --min-seconds 30 --max-seconds 60
+
+# Authenticate YouTube channel via OAuth
+python -m cliper youtube-auth --account main
+python -m cliper youtube-auth --list
+
+# Browser logins
+python -m cliper browser-login   # ChatGPT
+python -m cliper gemini-login    # Google Gemini
+python -m cliper x-login         # X (Twitter)
+
+# Run synthetic demo render
+python -m cliper demo --width 1080
+
+# Clean up expired jobs
+python -m cliper cleanup
 ```
 
-The CUDA setting is explicit: a missing GPU/library fails with an error rather than silently moving transcription to the CPU. NVENC failures likewise remain visible. CPU decoding, subtitle composition, face detection and audio processing are still part of the pipeline; this is not an entirely GPU-resident editor. Grok/Gemini/OpenAI calls continue to run at their respective API providers.
+### Automation PowerShell Scripts (`scripts/`)
 
-Each new transcription writes `transcript.runtime.json` with the actual device and compute type, and clip JSON metadata records the encoder. Existing cached transcripts and validated exports may be reused on retry. Submit a new video job to exercise the new GPU configuration from the beginning.
-
-## Telegram controls
-
-| Command | Action |
+| Script | Purpose |
 |---|---|
-| `/start`, `/help` | Open the studio and command help |
-| `/whoami` | Show your numeric Telegram user ID |
-| Send URL or `/clip URL` | Queue a supported source |
-| `/platforms` | Supported public video/VOD platforms and limitations |
-| `/scan 24` | Discovery budget for long sources, 6–1440 minutes |
-| `/focus 01:20:00 08:10:00` | Prioritize known timestamps; `/focus clear` resets |
-| Send video / video document | Process an upload up to the cloud download limit |
-| `/jobs` | Last 10 jobs |
-| `/status JOB` | Current stage; reopen a waiting shortlist |
-| `/render JOB 1,3,5` | Generate specific clip numbers |
-| `/render JOB all` | Generate the complete shortlist |
-| `/cancel JOB` | Stop queued or running work |
-| `/retry JOB` | Resume a failed job, preserving completed work |
-| `/export JOB` | ZIP of transcript, SRT, ASS, edit plans and QA reports |
-| `/settings` | View defaults and setting examples |
-| `/provider` | Show available providers, selected model and key configuration status |
-| `/provider grok` | Choose xAI Grok for new videos (`xai` also works) |
-| `/provider gemini` | Choose Google Gemini for new videos |
-| `/provider openai` | Choose OpenAI for new videos |
-| `/provider heuristic` | Use basic offline selection |
-| `/provider default` | Follow the environment's `AI_PROVIDER` again |
-| `/clips 5` | Request 1–10 clips |
-| `/length 30-60` | Length range, within 10–120 seconds |
-| `/style studio` | `studio` mint highlight, `bold` yellow highlight, or `minimal` white captions |
-| `/captions on` | Toggle burned-in captions; subtitle sidecars are still exported |
-| `/reframe auto` | `auto`, `blur`, or `center` |
-| `/language auto` | Whisper language detection, or language code such as `en` or `hi` |
-| `/resolution 1080` | 1080×1920 or 720×1280 |
-| `/auto on` | Automatically render all shortlisted clips for new jobs |
-| `/cleanup` | Remove expired completed, failed or cancelled jobs |
+| `studio.bat` | Double-click to launch Web Studio and open browser |
+| `start.ps1` | Start the Telegram bot daemon |
+| `start-web.ps1` | Start FastAPI backend and Vite frontend |
+| `setup-gpu.ps1` | Install CUDA 12, cuDNN 9, and PyTorch GPU packages |
+| `setup-web.ps1` | Install frontend Node dependencies (`npm ci`) |
+| `youtube-auth.ps1` | Interactive YouTube channel OAuth authorization |
+| `chatgpt-login.ps1` | Open Chromium for manual ChatGPT login |
+| `gemini-login.ps1` | Open Chromium for manual Gemini login |
+| `x-login.ps1` | Open Chromium for manual X login |
+| `demo.ps1` | Render sample test clip without credentials |
+| `allow-firewall.ps1` | Open Windows Firewall port 8788 for mobile access |
 
-Settings are saved per owner, and each job takes a snapshot when submitted. A shortlist may contain fewer clips than requested if the source lacks enough distinct, complete moments. Use a wider length range for difficult sources.
+---
 
-Only allowlisted users in **private chats** can submit jobs, change settings, or access results. Job actions check ownership again. Source links must use HTTPS and an allowlisted provider hostname. Default platforms include YouTube, Twitch, Kick, Vimeo, Facebook, Instagram, TikTok, X/Twitter, Dailymotion, Rumble, Bilibili and Odysee. Send a specific public video or saved VOD/clip; ongoing live channels are not recorded. Availability depends on the host and yt-dlp. Arbitrary direct HTTP downloads are not exposed by the bot; use Telegram uploads or the local CLI for other files.
+## Telegram Bot Commands
 
-## What the editing pipeline does
+| Command | Arguments | Action |
+|---|---|---|
+| `/start` | None | Open interactive studio dashboard and main menu |
+| `/help` | None | Display command reference and operational tips |
+| `/whoami` | None | View your numeric Telegram user ID (for allowlist) |
+| `/clip` | `<URL>` | Queue a public video for processing |
+| `/geminiclip` | `<URL>` | Queue a YouTube video via zero-cost Gemini browser |
+| `/speedclip` | `<URL>` | Queue a YouTube video with IShowSpeed energy preset |
+| `/xpost` | `<desk> <topic>` | Queue real-time news research and X draft generation |
+| `/jobs` | None | List your last 10 jobs with status and progress |
+| `/status` | `<JOB_ID>` | Check job stage or reopen a waiting shortlist |
+| `/render` | `<JOB_ID> 1,3,5` | Render specific clips from the shortlist |
+| `/render` | `<JOB_ID> all` | Render all clips from the shortlist |
+| `/cancel` | `<JOB_ID>` | Abort a queued or currently executing job |
+| `/retry` | `<JOB_ID>` | Resume a failed job from the last valid checkpoint |
+| `/export` | `<JOB_ID>` | Download ZIP of transcripts, SRT, ASS, and metadata |
+| `/provider` | `<name>` | Switch AI model (`grok`, `gemini`, `openai`, `chatgpt`, `heuristic`) |
+| `/clips` | `<1-10>` | Set default number of clips to generate |
+| `/length` | `<min>-<max>` | Set clip duration boundaries in seconds (e.g., `30-60`) |
+| `/style` | `<name>` | Set subtitle style (`studio`, `bold`, `minimal`) |
+| `/captions` | `on` / `off` | Toggle burned-in subtitles |
+| `/reframe` | `auto` / `blur` / `center` | Set framing method |
+| `/autopublish` | `on` / `off` | Toggle automated Instagram publication |
+| `/scan` | `<minutes>` | Set long-source discovery budget (6–1440 min) |
+| `/focus` | `HH:MM:SS ...` | Prioritize specific timestamps in long streams |
+| `/cleanup` | None | Manually purge expired completed and failed jobs |
 
-- **Selection:** Uses caption indexing or bounded audio discovery for links, with explicit timeline coverage. Candidate discovery and critique validate actual segment IDs, length, long gaps and scoring constraints before removing overlaps and repeated text. Selected intervals receive local word-timestamp correction.
-- **Scoring:** Hook 25%, payoff 25%, standalone clarity 25%, emotion 10%, usefulness 15%. Scores are editorial estimates, not probabilities, predicted views, or measured virality. The offline heuristic is clearly labelled and deliberately scores conservatively.
-- **Captions:** Real Whisper word timestamps drive short stationary phrases with the spoken word highlighted. Text is escaped before writing ASS, and captions stay above common bottom controls. SRT and ASS remain available for later editing.
-- **Reframing:** OpenCV YuNet samples faces about twice per second and smooths square crop centers using a dead zone, dropout hold and scene-cut reset. Optional wide-group preservation keeps multiple faces in view. Haar is a reported fallback if the model is missing. This is face detection, **not active-speaker identification**, and the ranking model does not inspect every source frame.
-- **Audio/export:** Normalizes loudness, encodes H.264/AAC with a Telegram-aware bitrate budget, strips source metadata and enables streaming playback. Spoken content and timing stay intact; it does not remove fillers or splice words together.
-- **QA:** Checks dimensions, duration, audio presence, effective silence, file size, and decodes the entire rendered clip. Failed technical validation triggers one lower-bitrate blurred-layout retry. This is **technical QA**, not a guarantee of factual correctness, accurate transcription, readable typography for every language, or perfect face visibility.
+---
 
-Instagram publication and category music are available through the controls documented in [FEATURES.md](FEATURES.md). There is no view-growth guarantee. Review clips before publishing. Install fonts covering the source language; the Docker image includes Noto fonts, while Windows uses available system fonts through libass.
+## Configuration Reference (`.env` & `config/`)
 
-## Reliability, limits and storage
+### Key Environment Variables (`.env`)
 
-`data/jobs.sqlite3` tracks jobs, preferences, selections and delivery checkpoints. Each job has its own `data/jobs/<id>/` directory containing the downloaded source, audio, transcript, analysis and exports. Originals supplied through the CLI remain at their original paths and are never deleted by retention.
+```dotenv
+# ==============================================================================
+# TELEGRAM & SECURITY
+# ==============================================================================
+TELEGRAM_BOT_TOKEN=your-telegram-bot-token
+ALLOWED_USER_IDS=123456789
 
-One worker processes media at a time, while Telegram handlers remain responsive. A process lock prevents multiple CLIPER instances using the same data directory. Restarted analysis jobs reuse saved transcripts and analysis, and restarted render jobs reuse validated exports. Successful deliveries are checkpointed. Telegram does not offer an idempotency key for video sends: a crash or network timeout after acceptance but before recording success can cause a duplicate delivery.
+# ==============================================================================
+# AI PROVIDER SELECTION
+# ==============================================================================
+AI_PROVIDER=chatgpt_browser    # chatgpt_browser, gemini, xai, openai, heuristic
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4.1-mini
+XAI_API_KEY=
+XAI_MODEL=grok-4.6
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-2.5-flash
 
-Defaults in `.env.example`:
+# ==============================================================================
+# BROWSER AUTOMATION (Playwright)
+# ==============================================================================
+CHATGPT_BROWSER_HEADLESS=false
+CHATGPT_BROWSER_TIMEOUT=240
+CHATGPT_BROWSER_MAX_CHARS=60000
 
-| Limit | Default |
-|---|---:|
-| Source duration | 1440 minutes / 24 hours |
-| Long-source threshold | 45 minutes |
-| Long-source discovery budget | 24 minutes, adjustable per owner |
-| Concurrent scan downloads | 2 |
-| Source download size | 1500 MB |
-| Minimum free disk | 3000 MB |
-| Active/awaiting jobs | 3 |
-| Retention for finished jobs | 7 days |
-| Telegram cloud upload download | 20 MB |
-| Export file budget | below 49,000,000 bytes |
+# ==============================================================================
+# YOUTUBE PUBLISHING (Data API v3)
+# ==============================================================================
+YOUTUBE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+YOUTUBE_CLIENT_SECRET=your-client-secret
 
-Retention runs on startup and hourly, and only affects terminal jobs older than the configured period. A cancelled or failed job keeps artifacts until retention or cleanup. Demo folders and cached Whisper models are not automatically deleted. Logs rotate at 2 MB with three backups. Known configured secrets are redacted from error messages; transcripts and exported metadata remain private local files.
+# ==============================================================================
+# INSTAGRAM GRAPH API
+# ==============================================================================
+IG_CLIPS_TOKEN=
+IG_DARK_TOKEN=
+PUBLIC_MEDIA_BASE_URL=https://media.yourdomain.com/cliper
 
-OpenAI, Grok and Gemini modes send transcript text and selected surrounding passages to the chosen provider. OpenAI Responses requests use `store=False`; this flag is not sent to Grok/Gemini chat endpoints. Each provider's applicable data handling policies still apply. Local Whisper keeps source audio on the machine. Heuristic mode makes no LLM calls. Model files are downloaded on first transcription. The input character budget and source-duration limit bound analysis size; provider usage still depends on the chosen model and source length.
-
-## Docker / always-on deployment
-
-Fill `.env`, then on a Docker host:
-
-```bash
-docker compose up -d --build
-docker compose logs -f
-docker compose down
+# ==============================================================================
+# GPU & HARDWARE ACCELERATION
+# ==============================================================================
+WHISPER_MODEL=small            # tiny, base, small, medium, large-v3
+WHISPER_DEVICE=cuda            # cuda or cpu
+WHISPER_COMPUTE_TYPE=int8_float16
+GPU_DEVICE_INDEX=0
+VIDEO_ENCODER=h264_nvenc       # h264_nvenc or libx264
 ```
 
-The image runs as a non-root user and uses a named volume for jobs/models. No public port or webhook is required; it uses Telegram long polling. Do not run a second polling instance with the same bot token. CPU transcription and encoding can be slow for long sources; use shorter videos or a smaller Whisper model if needed. GPU mode requires a separately configured CUDA-compatible host/container and matching CTranslate2 libraries; the included Dockerfile is CPU-only.
+### Configuration Files (`config/`)
 
-The Docker configuration is included for deployment; it has not been built on this Windows environment. The supplied Compose file explicitly overrides the local GPU settings with CPU settings because the included image does not bundle the GPU runtime. For this RTX 4060 setup, run the bot directly on Windows with `scripts/start.ps1`. Telegram and paid AI integration require your credentials and must be live-tested after configuration.
+- `config/youtube.json`: Multi-account YouTube channel configuration, tokens, default privacy, and tags.
+- `config/instagram.json`: Multi-account Instagram account mappings, user IDs, and login types.
+- `config/niches.json`: Content pillars, banned topics, and character reference paths for 5 carousel niches.
+- `config/prompts.json`: User-customized prompt overrides for all clipping and scripting tasks.
 
-## Development and verification
+---
 
-```powershell
-.\.venv\Scripts\python.exe -m ruff check .
-.\.venv\Scripts\python.exe -m pytest -q
+## Troubleshooting & FAQ
+
+### 1. "Permission denied" or User Allowlist Error on Telegram
+- Send `/whoami` to your bot.
+- Copy the numeric ID into `ALLOWED_USER_IDS` in `.env`.
+- Restart `scripts/start.ps1`.
+
+### 2. "CUDA error: out of memory" or Missing CUDA DLLs
+- Run `.\scripts\setup-gpu.ps1` to ensure NVIDIA cuBLAS 12 and cuDNN 9 wheels are installed inside `.venv`.
+- Run `python -m cliper doctor` to verify CUDA compute availability.
+- If running out of VRAM, switch `WHISPER_MODEL=base` or `WHISPER_COMPUTE_TYPE=int8` in `.env`.
+
+### 3. YouTube Upload Fails with "Invalid Credentials" or Token Expired
+- Run `.\scripts\youtube-auth.ps1 -Account <key>` to re-authenticate the channel.
+- Ensure your Google Cloud OAuth Consent Screen is published or your Google account is added as a Test User.
+
+### 4. YouTube Upload Reaches Quota Limit
+- The YouTube Data API provides a default free quota of 10,000 units per day.
+- A video upload costs 1,600 units (approx. 6 uploads per day per Google Cloud project).
+- To publish more clips, apply for a free quota extension in Google Cloud Console or add multiple OAuth client IDs.
+
+### 5. Playwright Browser Login Window Does Not Appear
+- Ensure `CHATGPT_BROWSER_HEADLESS=false` in `.env` before running `scripts/chatgpt-login.ps1` or `scripts/gemini-login.ps1`.
+
+### 6. Subtitles Display Question Marks or Missing Font Glyphs
+- The default subtitle engine uses Arial/DejaVu.
+- For non-Latin scripts, set **Hook & caption language** to **Romanized** in Settings to convert text to clean Latin letters (e.g. Hindi → Hinglish).
+
+---
+
+## Repository Map
+
+```text
+cliper/
+├── cliper/                       # Core Python backend engine
+│   ├── bot.py                    # Telegram bot polling and inline UI
+│   ├── browser_provider.py       # ChatGPT Web Playwright adapter
+│   ├── captions.py               # ASS & SRT subtitle generator
+│   ├── carousel.py               # Faceless 5-niche carousel generator
+│   ├── cli.py                    # Command-line interface definitions
+│   ├── config.py                 # Configuration loader and validation
+│   ├── creative.py               # Carousel storytelling prompts & logic
+│   ├── gemini_clipping.py        # Gemini Web zero-cost YouTube clipper
+│   ├── gemini_images.py          # Gemini Web image generation adapter
+│   ├── media.py                  # FFmpeg render pipeline, YuNet & NVENC
+│   ├── models.py                 # Pydantic data schemas
+│   ├── music.py                  # Background music catalog resolver
+│   ├── pipeline.py               # Media intake & execution orchestrator
+│   ├── prompts.py                # Unified AI Prompt Registry
+│   ├── publishing.py             # Instagram Graph API publisher
+│   ├── speed_edit.py             # IShowSpeed SFX & reaction zoom engine
+│   ├── speed_profile.py          # IShowSpeed editorial brief & scoring
+│   ├── storage.py                # SQLite database management
+│   ├── stream_scan.py            # Long-stream bounded audio/caption scanner
+│   ├── transcribe.py             # faster-whisper isolated worker
+│   ├── vision.py                 # OpenCV YuNet face detection & tracking
+│   ├── web.py                    # FastAPI REST API & WebSocket server
+│   ├── x_browser.py              # X Web composer & publisher
+│   ├── x_content.py              # X news research & fact verification
+│   ├── x_studio.py               # X Studio state machine & scheduler
+│   └── youtube_publishing.py     # YouTube Data API v3 publisher & OAuth
+├── frontend/                     # Modern React 19 + Vite Web Studio
+│   ├── src/
+│   │   ├── App.tsx               # Studio shell, navigation, modals
+│   │   ├── Project.tsx           # Clip editor, live stage, Schedule All
+│   │   ├── Settings.tsx          # 6-tab deep configuration studio
+│   │   ├── Speed.tsx             # IShowSpeed dedicated web workflow
+│   │   ├── XStudio.tsx           # X news research & posting studio
+│   │   ├── Workspaces.tsx        # Publishing, Carousels, Music Library
+│   │   ├── styles.css            # Dark-mode design system & animations
+│   │   └── types.ts              # TypeScript interfaces
+├── config/                       # Configuration templates & account stores
+│   ├── instagram.json            # Instagram account profiles
+│   ├── niches.json               # Carousel niche brand definitions
+│   ├── prompts.json              # Custom AI prompt overrides
+│   └── youtube.json              # YouTube OAuth credentials & channels
+├── music/                        # Curated 64-track royalty-free audio
+│   ├── Chill - Ambient/          # Lofi, acoustic, vlog tracks
+│   ├── Cinematic - Epic/         # Orchestral & dramatic scores
+│   ├── Emotional - Sad/          # Melancholic piano & strings
+│   ├── Energetic - Hype/         # Phonk, EDM, workout & dance
+│   ├── Phonk/                    # Drift & Brazilian phonk
+│   └── Suspense - Thriller/      # Dark drones & rising tension
+├── scripts/                      # PowerShell & Python automation scripts
+│   ├── start-web.ps1             # Launch Web Studio
+│   ├── start.ps1                 # Launch Telegram bot
+│   ├── youtube-auth.ps1          # Authorize YouTube channels
+│   ├── chatgpt-login.ps1         # ChatGPT browser session setup
+│   ├── gemini-login.ps1          # Gemini browser session setup
+│   ├── x-login.ps1               # X browser session setup
+│   └── setup-gpu.ps1             # NVIDIA CUDA & cuDNN setup
+├── studio.bat                    # 1-Click Windows launcher for Web Studio
+├── Dockerfile                    # Container definition
+├── compose.yaml                  # Docker Compose deployment
+└── pyproject.toml                # Python package metadata & dependencies
 ```
 
-Tests cover ownership, URL restrictions, bounded timestamp selection, deduplication, persisted settings, queue capacity, restart recovery, cancellation, delivery checkpoints, AI request staging with a fake provider, escaping, real FFmpeg exports and decoding. The suite does not require Telegram credentials, an AI key, or model downloads. GitHub Actions runs the suite on Linux.
+---
 
-See [VERIFICATION.md](VERIFICATION.md) for the checks actually run in this workspace and the remaining live checks. `requirements-windows.lock` records the tested Windows environment; standard cross-platform installation uses `pyproject.toml` or `requirements.txt`.
-
-Key modules: `bot.py` handles Telegram; `storage.py` owns durable job state; `pipeline.py` coordinates work; `selection.py` handles editorial analysis; `transcribe.py` runs isolated Whisper; `vision.py` plans crops; `captions.py` writes timed subtitles; `media.py` downloads, renders and verifies; `cli.py` supplies local commands.
-
-## Troubleshooting
-
-- **Private bot response:** Set your numeric ID in `ALLOWED_USER_IDS`, restart, and use a private chat.
-- **API key missing/model unavailable:** Set the matching `OPENAI_API_KEY`, `XAI_API_KEY` or `GEMINI_API_KEY` and an accessible structured-output model, then restart. Use `doctor --provider gemini --online` (or `xai`/`openai`). `/provider` shows your saved choice; `/provider default` follows the environment again. `heuristic` works without an AI key but has substantially simpler selection.
-- **Model download failure:** First transcription needs access to Hugging Face. Model files live under `data/models`. Retry once connectivity is available.
-- **Missing CUDA DLL or CUDA device:** Run `scripts/setup-gpu.ps1`, then `doctor`. A driver reporting CUDA 13 does not by itself install the CUDA 12/cuDNN libraries used by Whisper; the project GPU extra provides those libraries.
-- **NVENC unavailable:** Check `doctor` and your NVIDIA driver. The selected FFmpeg build must include `h264_nvenc`. GPU encoding is not silently replaced by CPU encoding.
-- **Queue full:** Waiting shortlists count toward the limit. Render or cancel them with `/status JOB` or `/cancel JOB`.
-- **No suitable moments:** Try `/length 15-90`, clear speech, or a shorter source. The pipeline avoids padding the shortlist with invalid clips.
-- **Missing language glyphs:** Install a font for that script and restart. Prefer `minimal` style if dense captions are hard to read.
-- **Poor automatic crop:** Use `/reframe blur` and submit a new job. This preserves slides and multiple people.
-- **Telegram delivery failed:** Fix connectivity, then `/retry JOB`. Already checkpointed clips are skipped.
-- **Upload interrupted:** Send the attachment again; the original Telegram download may not have completed.
-- **Another process uses the data directory:** Stop the other bot/CLI process first. Do not delete a live lock to start a competing worker.
-
-## Primary implementation references
-
-[Telegram Bot API](https://core.telegram.org/bots/api) documents file transfer methods and current cloud limits. [python-telegram-bot ApplicationBuilder](https://docs.python-telegram-bot.org/en/stable/telegram.ext.applicationbuilder.html) documents application lifecycle hooks. [OpenAI structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs) documents typed Responses parsing. [faster-whisper](https://github.com/SYSTRAN/faster-whisper) documents local transcription and word timestamps. [yt-dlp](https://github.com/yt-dlp/yt-dlp) documents provider downloading and JavaScript runtimes. [FFmpeg filters](https://ffmpeg.org/ffmpeg-filters.html) documents crop, subtitles, blur and audio filters.
+<p align="center">
+  <b>Built for creators who value craftsmanship, automation, and privacy.</b><br>
+  CLIPER operates completely on your local machine and private servers.
+</p>

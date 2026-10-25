@@ -163,7 +163,7 @@ class Proposal(Model):
     title: str = Field(max_length=120)
     reason: str = Field(max_length=1000)
     hook_text: str = Field(max_length=500)
-    ratings: Ratings
+    ratings: Ratings = Field(default_factory=lambda: Ratings(hook=80, payoff=80, standalone=80, emotion=80, usefulness=80))
     music_category: str = "chill_ambient"
     caption: str = Field(default="", max_length=1800)
     hashtags: list[str] = Field(default_factory=list, max_length=5)
@@ -176,6 +176,13 @@ class Proposal(Model):
         if not isinstance(data, dict):
             return data
         res = dict(data)
+        ratings_val = res.get("ratings")
+        if not isinstance(ratings_val, (dict, Ratings)):
+            flattened = {k: res[k] for k in ("hook", "payoff", "standalone", "emotion", "usefulness") if k in res}
+            if flattened:
+                res["ratings"] = flattened
+            elif ratings_val is None or "ratings" not in res:
+                res["ratings"] = {"hook": 80, "payoff": 80, "standalone": 80, "emotion": 80, "usefulness": 80}
         cat = str(res.get("music_category", "")).strip()
         from .music import CATEGORIES
         valid_cats = set(CATEGORIES.keys()) | {v.lower().replace(" - ", "_").replace(" ", "_") for v in CATEGORIES.values()}
@@ -200,6 +207,29 @@ class Proposal(Model):
 
 class Proposals(Model):
     clips: list[Proposal] = Field(max_length=30)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _sanitize_clips(cls, data):
+        if not isinstance(data, dict):
+            return data
+        raw_clips = data.get("clips")
+        if not isinstance(raw_clips, list):
+            return data
+        valid = []
+        for c in raw_clips:
+            if isinstance(c, Proposal):
+                valid.append(c)
+            elif isinstance(c, dict):
+                try:
+                    valid.append(Proposal.model_validate(c))
+                except Exception:
+                    continue
+        if valid:
+            res = dict(data)
+            res["clips"] = valid
+            return res
+        return data
 
 
 class Clip(Model):

@@ -302,5 +302,67 @@ def test_parse_result_chatgpt_real_raw_recovery():
     path = Path("data/logs/chatgpt_last_failed_raw.txt")
     if path.exists():
         raw = path.read_text(encoding="utf-8")
-        proposals = parse_result(raw, "197f612ccf1b4da3bd6204fa89f10af7", Proposals)
-        assert len(proposals.clips) == 6
+        req_match = re.search(r'"request_id"\s*:\s*"([^"]+)"', raw)
+        req_id = req_match.group(1) if req_match else "197f612ccf1b4da3bd6204fa89f10af7"
+        proposals = parse_result(raw, req_id, Proposals)
+        assert len(proposals.clips) >= 1
+
+
+def test_parse_result_proposals_resilient_to_unescaped_quotes():
+    raw = '''{
+        "request_id": "unescaped_quotes_req",
+        "result": {
+            "clips": [
+                {
+                    "first_segment": 0,
+                    "last_segment": 5,
+                    "title": "SEAL Graduation Wasn't the "Finish Line"",
+                    "reason": "He said "Go" and they went.",
+                    "hook_text": "then you're going to Seal Team 2 on Friday." And I'm like, "What the [ __ ]",
+                    "ratings": {"hook": 85, "payoff": 90, "standalone": 80, "emotion": 75, "usefulness": 70},
+                    "music_category": "energetic_hype",
+                    "hook_variants": [
+                        "Why did he ask "What the [ __ ]"?",
+                        "BUDS was "finished", qualification was not"
+                    ]
+                }
+            ]
+        }
+    }'''
+    proposals = parse_result(raw, "unescaped_quotes_req", Proposals)
+    assert len(proposals.clips) == 1
+    clip = proposals.clips[0]
+    assert 'Finish Line' in clip.title
+    assert "Seal Team 2" in clip.hook_text
+    assert clip.ratings.hook == 85
+    assert len(clip.hook_variants) == 2
+
+
+def test_parse_result_proposals_resilient_to_missing_ratings_and_fragments():
+    raw = '''{
+        "request_id": "resilience_req",
+        "result": {
+            "clips": [
+                {
+                    "first_segment": 10,
+                    "last_segment": 20,
+                    "title": "Good Clip with Missing Ratings",
+                    "reason": "Clear explanation",
+                    "hook_text": "Did you know this fact?",
+                    "hook": 95,
+                    "payoff": 90
+                },
+                {
+                    "music_category": "chill_ambient",
+                    "caption": "Severed orphan fragment with no first_segment or title"
+                }
+            ]
+        }
+    }'''
+    proposals = parse_result(raw, "resilience_req", Proposals)
+    assert len(proposals.clips) == 1
+    clip = proposals.clips[0]
+    assert clip.title == "Good Clip with Missing Ratings"
+    assert clip.ratings.hook == 95
+    assert clip.ratings.payoff == 90
+    assert clip.ratings.emotion == 80

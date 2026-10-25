@@ -1,0 +1,41 @@
+﻿[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+WrapStyle: 0
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,62,&H00FFFFFF,&H0064F5BD,&H00141210,&H80000000,-1,0,0,0,100,100,0,0,1,3,1,2,86,86,715,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 1,0:00:00.00,0:00:19.00,Default,,0,0,0,,{\an2\q2\pos(540,629)\fnArial\fs60\b1\1c&H00FFFFFF&\bord0\shad0}Test demand before building
+Dialogue: 0,0:00:00.00,0:00:00.67,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}{\1c&H0064F5BD}Why{\1c&H00FFFFFF&} did my
+Dialogue: 0,0:00:00.67,0:00:01.33,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}Why {\1c&H0064F5BD}did{\1c&H00FFFFFF&} my
+Dialogue: 0,0:00:01.33,0:00:02.00,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}Why did {\1c&H0064F5BD}my{\1c&H00FFFFFF&}
+Dialogue: 0,0:00:02.00,0:00:02.67,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}{\1c&H0064F5BD}first{\1c&H00FFFFFF&} project fail?
+Dialogue: 0,0:00:02.67,0:00:03.33,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}first {\1c&H0064F5BD}project{\1c&H00FFFFFF&} fail?
+Dialogue: 0,0:00:03.33,0:00:04.00,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}first project {\1c&H0064F5BD}fail?{\1c&H00FFFFFF&}
+Dialogue: 0,0:00:05.00,0:00:05.57,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}{\1c&H0064F5BD}I{\1c&H00FFFFFF&} tried building everything
+Dialogue: 0,0:00:05.57,0:00:06.14,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}I {\1c&H0064F5BD}tried{\1c&H00FFFFFF&} building everything
+Dialogue: 0,0:00:06.14,0:00:06.71,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}I tried {\1c&H0064F5BD}building{\1c&H00FFFFFF&} everything
+Dialogue: 0,0:00:06.71,0:00:07.29,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}I tried building {\1c&H0064F5BD}everything{\1c&H00FFFFFF&}
+Dialogue: 0,0:00:07.29,0:00:07.86,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}{\1c&H0064F5BD}before{\1c&H00FFFFFF&} testing demand.
+Dialogue: 0,0:00:07.86,0:00:08.43,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}before {\1c&H0064F5BD}testing{\1c&H00FFFFFF&} demand.
+Dialogue: 0,0:00:08.43,0:00:09.00,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}before testing {\1c&H0064F5BD}demand.{\1c&H00FFFFFF&}
+Dialogue: 0,0:00:10.00,0:00:10.67,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}{\1c&H0064F5BD}One{\1c&H00FFFFFF&} conversation changed
+Dialogue: 0,0:00:10.67,0:00:11.33,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}One {\1c&H0064F5BD}conversation{\1c&H00FFFFFF&} changed
+Dialogue: 0,0:00:11.33,0:00:12.00,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}One conversation {\1c&H0064F5BD}changed{\1c&H00FFFFFF&}
+Dialogue: 0,0:00:12.00,0:00:12.67,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}{\1c&H0064F5BD}the{\1c&H00FFFFFF&} entire plan.
+Dialogue: 0,0:00:12.67,0:00:13.33,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}the {\1c&H0064F5BD}entire{\1c&H00FFFFFF&} plan.
+Dialogue: 0,0:00:13.33,0:00:14.00,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}the entire {\1c&H0064F5BD}plan.{\1c&H00FFFFFF&}
+Dialogue: 0,0:00:15.00,0:00:15.50,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}{\1c&H0064F5BD}Now{\1c&H00FFFFFF&} I test the smallest
+Dialogue: 0,0:00:15.50,0:00:16.00,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}Now {\1c&H0064F5BD}I{\1c&H00FFFFFF&} test the smallest
+Dialogue: 0,0:00:16.00,0:00:16.50,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}Now I {\1c&H0064F5BD}test{\1c&H00FFFFFF&} the smallest
+Dialogue: 0,0:00:16.50,0:00:17.00,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}Now I test {\1c&H0064F5BD}the{\1c&H00FFFFFF&} smallest
+Dialogue: 0,0:00:17.00,0:00:17.50,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}Now I test the {\1c&H0064F5BD}smallest{\1c&H00FFFFFF&}
+Dialogue: 0,0:00:17.50,0:00:18.00,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}{\1c&H0064F5BD}useful{\1c&H00FFFFFF&} idea first.
+Dialogue: 0,0:00:18.00,0:00:18.50,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}useful {\1c&H0064F5BD}idea{\1c&H00FFFFFF&} first.
+Dialogue: 0,0:00:18.50,0:00:19.00,Default,,0,0,0,,{\q2\fs62\an2\pos(540,1205)}useful idea {\1c&H0064F5BD}first.{\1c&H00FFFFFF&}
