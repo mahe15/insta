@@ -25,11 +25,13 @@ import {
   Menu,
   Play,
   Plus,
+  Scissors,
   Search,
   Send,
   Settings2,
   Sparkles,
   Square,
+  Subtitles,
   Upload,
   Volume2,
   X,
@@ -52,10 +54,14 @@ import XStudio from "./XStudio";
 import Studio from "./Studio";
 import Project from "./Project";
 import Settings from "./Settings";
+import YouTubeAgent from "./YouTubeAgent";
+import FastCut from "./FastCut";
 import { Carousels, MusicLibrary, Publishing } from "./Workspaces";
 
 const navigation = [
   { path: "/", label: "Studio", icon: LayoutGrid },
+  { path: "/fast-cut", label: "Fast Cut", icon: Scissors },
+  { path: "/youtube-agent", label: "YouTube Agent", icon: Film },
   { path: "/speed", label: "Speed Studio", icon: Zap },
   { path: "/x", label: "X Studio", icon: Send },
   { path: "/carousels", label: "Carousels", icon: Images },
@@ -397,12 +403,14 @@ export default function App() {
           <main id="main" tabIndex={-1}>
             <Routes>
               <Route path="/" element={<Studio />} />
+              <Route path="/fast-cut" element={<FastCut />} />
               <Route path="/project/:id" element={<Project />} />
               <Route path="/speed" element={<Speed />} />
               <Route path="/x" element={<XStudio />} />
               <Route path="/carousels" element={<Carousels />} />
               <Route path="/publishing" element={<Publishing />} />
               <Route path="/music" element={<MusicLibrary />} />
+              <Route path="/youtube-agent" element={<YouTubeAgent />} />
               <Route path="/settings" element={<Settings />} />
               <Route
                 path="*"
@@ -518,6 +526,11 @@ function NewProject({
   const [musicFolder, setMusicFolder] = useState<string>("");
   const [musicTrack, setMusicTrack] = useState<string>("");
   const [musicGain, setMusicGain] = useState<number>(boot.preferences.music_gain ?? 0.5);
+  const [captions, setCaptions] = useState<boolean>(boot.preferences.captions ?? true);
+  const [captionStyle, setCaptionStyle] = useState<string>(boot.preferences.style || "studio");
+  const [fastCut, setFastCut] = useState<boolean>(boot.preferences.fast_cut ?? false);
+  const [fastCutDuration, setFastCutDuration] = useState<number>(boot.preferences.fast_cut_duration ?? 90);
+  const [fastCutSkipIntro, setFastCutSkipIntro] = useState<boolean>(boot.preferences.fast_cut_skip_intro ?? false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -565,6 +578,11 @@ function NewProject({
       setMusicFolder("");
       setMusicTrack("");
       setMusicGain(boot.preferences.music_gain ?? 0.5);
+      setCaptions(boot.preferences.captions ?? true);
+      setCaptionStyle(boot.preferences.style || "studio");
+      setFastCut(boot.preferences.fast_cut ?? false);
+      setFastCutDuration(boot.preferences.fast_cut_duration ?? 90);
+      setFastCutSkipIntro(boot.preferences.fast_cut_skip_intro ?? false);
       stopAudio();
     } else {
       stopAudio();
@@ -586,14 +604,32 @@ function NewProject({
         music_track: musicEnabled && musicMode === "song" ? (musicTrack || null) : null,
       };
 
+      const fastCutPrefs = fastCut
+        ? {
+            fast_cut: true,
+            fast_cut_duration: fastCutDuration,
+            fast_cut_skip_intro: fastCutSkipIntro,
+            layout: "four_three_hook",
+          }
+        : {
+            fast_cut: false,
+          };
+
+      const projectPrefs = {
+        captions,
+        style: captionStyle,
+        ...musicPrefs,
+        ...rules,
+        ...fastCutPrefs,
+      };
+
       if (tab === "upload") {
         if (!file) throw new Error("Choose a video file first.");
         result = (await upload("/jobs/upload", file, {
           clipping_mode: "audio_first",
           scan_minutes: scan,
           clips,
-          ...musicPrefs,
-          ...rules,
+          ...projectPrefs,
         })) as unknown as Job;
       } else {
         const focusTimes = focus.trim()
@@ -620,8 +656,7 @@ function NewProject({
             scan_minutes: scan,
             clips,
             focus_times: focusTimes,
-            ...musicPrefs,
-            ...rules,
+            ...projectPrefs,
           },
         });
       }
@@ -749,6 +784,112 @@ function NewProject({
             />
           </label>
         )}
+
+        {/* Fast Cut Feature Control */}
+        <div className={`project-fast-cut-picker ${fastCut ? "enabled" : ""}`}>
+          <div className="project-fast-cut-header">
+            <span className="project-fast-cut-title">
+              <Scissors size={16} />
+              <span>Fast Cut (Sequential Parts)</span>
+            </span>
+            <Switch
+              label="Enable Fast Cut"
+              checked={fastCut}
+              onChange={setFastCut}
+            />
+          </div>
+
+          {fastCut && (
+            <div className="fast-cut-content">
+              <div className="form-grid">
+                <Field
+                  label="Clip duration (seconds)"
+                  hint="Cuts video into sequential parts (default: 90s)."
+                >
+                  <input
+                    type="number"
+                    min={10}
+                    max={600}
+                    step={5}
+                    value={fastCutDuration}
+                    onChange={(e) => setFastCutDuration(Math.max(10, Math.min(600, +e.target.value)))}
+                  />
+                </Field>
+                <div className="skip-intro-box">
+                  <Switch
+                    label="Skip first 3 min"
+                    description="Skip first 180s (3 min) before cutting"
+                    checked={fastCutSkipIntro}
+                    onChange={setFastCutSkipIntro}
+                  />
+                </div>
+              </div>
+              <div className="fast-cut-info-banner">
+                <span className="fast-cut-chip">4:3 Aspect Ratio</span>
+                <span className="fast-cut-chip">Top Label: "Part 1, Part 2..."</span>
+                <span className="fast-cut-chip">YouTube Shorts / Reels</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Video Captions and Subtitles Control */}
+        <div className={`project-captions-picker ${!captions ? "disabled" : ""}`}>
+          <div className="project-captions-header">
+            <span className="project-captions-title">
+              <Subtitles size={16} />
+              <span>Video Captions</span>
+            </span>
+            <Switch
+              label="Burn in captions"
+              checked={captions}
+              onChange={setCaptions}
+            />
+          </div>
+
+          {captions ? (
+            <>
+              <div className="captions-style-row">
+                <span className="captions-style-label">Subtitle style</span>
+                <div className="captions-style-tabs" role="tablist">
+                  <button
+                    type="button"
+                    className={captionStyle === "studio" ? "chosen" : ""}
+                    onClick={() => setCaptionStyle("studio")}
+                  >
+                    Studio (Mint)
+                  </button>
+                  <button
+                    type="button"
+                    className={captionStyle === "bold" ? "chosen" : ""}
+                    onClick={() => setCaptionStyle("bold")}
+                  >
+                    Bold (Yellow)
+                  </button>
+                  <button
+                    type="button"
+                    className={captionStyle === "minimal" ? "chosen" : ""}
+                    onClick={() => setCaptionStyle("minimal")}
+                  >
+                    Minimal (White)
+                  </button>
+                </div>
+              </div>
+              <div className="captions-on-banner">
+                <Check size={14} />
+                <span>
+                  Word-timed animated subtitles will be generated and burned into the video.
+                </span>
+              </div>
+            </>
+          ) : (
+            <div className="captions-off-banner">
+              <span>
+                <strong>Clean video:</strong> Captions and subtitle overlays will be <strong>turned off</strong> on all clips.
+              </span>
+            </div>
+          )}
+        </div>
 
         {/* Music and Folder Selection */}
         <div className="project-music-picker">
@@ -973,6 +1114,9 @@ function NewProject({
             {boot.preferences.min_seconds}–{boot.preferences.max_seconds}s clips
           </span>
           <span>{boot.preferences.width}p export</span>
+          <span style={{ color: captions ? "inherit" : "var(--warning, #f59e0b)" }}>
+            {captions ? `Captions on (${captionStyle})` : "Captions off"}
+          </span>
         </div>
         {error && (
           <div className="inline-error" role="alert">

@@ -1,0 +1,57 @@
+{
+  "topic": "Start small",
+  "pillar": "Discipline",
+  "hook": "Start with one useful step",
+  "caption": "A small action makes the next step easier.",
+  "hashtags": [
+    "discipline"
+  ],
+  "slides": [
+    {
+      "text": "Step 0",
+      "environment": "Library",
+      "action": "The character reads",
+      "lighting": "Warm desk light",
+      "camera": "Medium shot",
+      "mood": "Calm",
+      "image_prompt": "A cinematic portrait of the original character reading",
+      "top_scene": null,
+      "bottom_scene": null
+    },
+    {
+      "text": "Step 1",
+      "environment": "Library",
+      "action": "The character reads",
+      "lighting": "Warm desk light",
+      "camera": "Medium shot",
+      "mood": "Calm",
+      "image_prompt": "A cinematic portrait of the original character reading",
+      "top_scene": null,
+      "bottom_scene": null
+    },
+    {
+      "text": "Step 2",
+      "environment": "Library",
+      "action": "The character reads",
+      "lighting": "Warm desk light",
+      "camera": "Medium shot",
+      "mood": "Calm",
+      "image_prompt": "A cinematic portrait of the original character reading",
+      "top_scene": null,
+      "bottom_scene": null
+    },
+    {
+      "text": "Step 3",
+      "environment": "Library",
+      "action": "The character reads",
+      "lighting": "Warm desk light",
+      "camera": "Medium shot",
+      "mood": "Calm",
+      "image_prompt": "A cinematic portrait of the original character reading",
+      "top_scene": null,
+      "bottom_scene": null
+    }
+  ],
+  "calculations": [],
+  "sources": []
+}

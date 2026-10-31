@@ -1,0 +1,18 @@
+{
+  "fingerprint": "b8bfb4423586a4b4ec0c0dd86edb4b700b6c026f2cfed4e48fa2c63ec2411cee",
+  "visual": {
+    "text_matches": true,
+    "character_matches": true,
+    "composition_ok": true,
+    "issues": [],
+    "observed_text": "Step 2",
+    "status": "checked",
+    "method": "Gemini visual review"
+  },
+  "technical": {
+    "width": 1080,
+    "height": 1350,
+    "luma_std": 43.07,
+    "upscale_needed": false
+  }
+}

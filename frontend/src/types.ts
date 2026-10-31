@@ -28,6 +28,9 @@ export type Preferences = {
   export_quality: string;
   auto_render: boolean;
   layout: string;
+  fast_cut?: boolean;
+  fast_cut_duration?: number;
+  fast_cut_skip_intro?: boolean;
   music: boolean;
   music_ducking: boolean;
   music_override?: string | null;
@@ -264,3 +267,127 @@ export type PromptInfo = {
   variables: string[];
   updated_at?: number;
 };
+
+export type HookProperties = {
+  SPECIFICITY: number;
+  ADDRESS: number;
+  STAKES: number;
+  CURIOSITY: number;
+  BREVITY: number;
+};
+
+export type HookFormula = {
+  id: string;
+  name: string;
+  shape: string;
+  example: string;
+  fails_when: string;
+  match?: string[];
+};
+
+export type HookScoreResult = {
+  hook: string;
+  properties: HookProperties;
+  verdict: number;
+  band: "STRONG" | "WORKABLE" | "WEAK";
+  formula: string;
+  formula_hits: number;
+  formula_info?: HookFormula | null;
+  weakest: keyof HookProperties;
+  fix: string;
+  word_count: number;
+};
+
+export type PackageLintIssue = {
+  kind: string;
+  message: string;
+};
+
+export type PackageLintResult = {
+  title: string;
+  thumb?: string | null;
+  chars: number;
+  score: number;
+  status: "PASS" | "WARN" | "FAIL";
+  desktop_preview: string;
+  mobile_preview: string;
+  issues: PackageLintIssue[];
+  good: string[];
+};
+
+export type DeadAirCut = {
+  kind: "DEAD" | "FILLER" | "REPEAT";
+  start: number;
+  end: number;
+  duration: number;
+  why: string;
+};
+
+export type DeadAirResult = {
+  duration: number;
+  cuts: DeadAirCut[];
+  removed_seconds: number;
+  out_seconds: number;
+  percent_saved: number;
+  cues_count: number;
+};
+
+export type Chapter = {
+  start: number;
+  end: number;
+  label: string;
+  draft_title: string;
+  duration: number;
+};
+
+export type ChaptersResult = {
+  valid: boolean;
+  rules?: {
+    first_is_00_00: boolean;
+    at_least_3_chapters: boolean;
+    all_min_10_seconds: boolean;
+  };
+  chapters: Chapter[];
+  formatted_text: string;
+};
+
+export type RetentionCliff = {
+  from: number;
+  to: number;
+  lost: number;
+  at_seconds?: number | null;
+  label: string;
+  spoken?: string;
+};
+
+export type RetentionResult = {
+  points: number;
+  start: number;
+  end: number;
+  hook_leak: number;
+  hook_verdict: "healthy" | "leaking" | "severe";
+  cliffs: RetentionCliff[];
+  slide_rate: number;
+  advice: string;
+};
+
+export type SwipeOutlier = {
+  channel: string;
+  title: string;
+  views: number;
+  median: number;
+  multiple: number;
+  formula: string;
+  url?: string;
+  duration?: number;
+};
+
+export type SwipeResult = {
+  total_analyzed: number;
+  channel_count: number;
+  min_multiple: number;
+  outliers: SwipeOutlier[];
+  skipped_thin_channels: { channel: string; count: number }[];
+  top_formulas: { formula: string; count: number }[];
+};
+

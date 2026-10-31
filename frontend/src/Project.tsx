@@ -148,6 +148,12 @@ export default function Project() {
             <Badge state={job.state} />
             <span>{dateTime(job.created)}</span>
             <span>{providerName(job.provider)}</span>
+            {job.preferences?.fast_cut && (
+              <span className="fast-cut-project-badge">
+                <Scissors size={12} />
+                Fast Cut · {job.preferences?.fast_cut_duration || 90}s parts (4:3)
+              </span>
+            )}
           </div>
         </div>
         <div className="heading-actions">

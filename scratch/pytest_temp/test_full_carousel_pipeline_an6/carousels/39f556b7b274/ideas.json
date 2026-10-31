@@ -1,0 +1,56 @@
+[
+  {
+    "topic": "Small action 0",
+    "pillar": "Discipline",
+    "hook": "Start small today 0",
+    "angle": "Practice one small useful action each day",
+    "calculations": [],
+    "sources": [],
+    "score": {
+      "hook": 95,
+      "share": 95,
+      "save": 95,
+      "emotion": 95,
+      "novelty": 95,
+      "audience": 95,
+      "brand": 95
+    },
+    "weighted_score": 95.0
+  },
+  {
+    "topic": "Small action 1",
+    "pillar": "Discipline",
+    "hook": "Start small today 1",
+    "angle": "Practice one small useful action each day",
+    "calculations": [],
+    "sources": [],
+    "score": {
+      "hook": 95,
+      "share": 95,
+      "save": 95,
+      "emotion": 95,
+      "novelty": 95,
+      "audience": 95,
+      "brand": 95
+    },
+    "weighted_score": 95.0
+  },
+  {
+    "topic": "Small action 2",
+    "pillar": "Discipline",
+    "hook": "Start small today 2",
+    "angle": "Practice one small useful action each day",
+    "calculations": [],
+    "sources": [],
+    "score": {
+      "hook": 95,
+      "share": 95,
+      "save": 95,
+      "emotion": 95,
+      "novelty": 95,
+      "audience": 95,
+      "brand": 95
+    },
+    "weighted_score": 95.0
+  }
+]

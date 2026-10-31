@@ -115,6 +115,85 @@ class Controller:
         except ValueError as exc:
             await update.message.reply_text(str(exc))
 
+    async def yt_agent_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not await self.guard(update):
+            return
+        cmd = update.message.text.split()[0].split("@")[0].lower()
+        args_text = (update.message.text or "").split(maxsplit=1)
+        body = args_text[1].strip() if len(args_text) > 1 else ""
+
+        if cmd in {"/hook", "/hookscore"}:
+            if not body:
+                await update.message.reply_text("Usage: /hook Your opening video hook line\nExample: /hook 97% of creators quit before video 30.")
+                return
+            from .youtube_agent import score_hook
+            res = score_hook(body)
+            msg = f"🎣 Hook Score: {res['verdict']}/100 [{res['band']}]\n"
+            msg += f"Formula: {res['formula']}\n"
+            msg += f"Weakest link: {res['weakest']} ({res['fix']})\n\n"
+            for k, v in res["properties"].items():
+                msg += f"• {k:<12}: {v:3d} {'#' * (v // 10)}\n"
+            await update.message.reply_text(msg)
+            return
+
+        if cmd in {"/ytlint", "/lint"}:
+            if not body:
+                await update.message.reply_text("Usage: /ytlint Title text [| Thumbnail text]")
+                return
+            parts = [p.strip() for p in body.split("|", 1)]
+            title = parts[0]
+            thumb = parts[1] if len(parts) > 1 else None
+            from .youtube_agent import lint_title_and_thumb
+            res = lint_title_and_thumb(title, thumb)
+            msg = f"🏷️ Packaging Lint: {res['score']}/100 [{res['status']}]\n"
+            msg += f"Characters: {res['chars']} (cut: 40 mob / 60 desk)\n"
+            if res["thumb"]:
+                msg += f"Thumbnail: \"{res['thumb']}\"\n"
+            msg += f"Mobile View: \"{res['mobile_preview']}\"\n\n"
+            for i in res["issues"]:
+                msg += f"❌ {i['kind']}: {i['message']}\n"
+            for g in res["good"]:
+                msg += f"✅ {g}\n"
+            await update.message.reply_text(msg)
+            return
+
+        if cmd == "/chapters":
+            if not body:
+                await update.message.reply_text("Usage: /chapters JOB_ID")
+                return
+            job_id = body.split()[0].strip()
+            owner = update.effective_user.id
+            try:
+                from .youtube_agent_web import _load_job_cues
+                from .youtube_agent import generate_youtube_chapters
+                cues = _load_job_cues(self.store, job_id, owner)
+                res = generate_youtube_chapters(cues)
+                text = f"📑 YouTube Chapters for {job_id} ({'VALID' if res['valid'] else 'INVALID'}):\n\n"
+                text += res["formatted_text"]
+                await update.message.reply_text(text)
+            except Exception as exc:
+                await update.message.reply_text(safe_error(exc, self.cfg))
+            return
+
+        if cmd == "/deadair":
+            if not body:
+                await update.message.reply_text("Usage: /deadair JOB_ID")
+                return
+            job_id = body.split()[0].strip()
+            owner = update.effective_user.id
+            try:
+                from .youtube_agent_web import _load_job_cues
+                from .youtube_agent import detect_deadair
+                cues = _load_job_cues(self.store, job_id, owner)
+                res = detect_deadair(cues)
+                msg = f"✂️ Edit Decision List for {job_id}:\n"
+                msg += f"Total: {res['duration']:.1f}s | Removed: {res['removed_seconds']:.1f}s ({res['percent_saved']}%) -> Out: {res['out_seconds']:.1f}s\n"
+                msg += f"Found {len(res['cuts'])} potential cuts (DEAD pauses, FILLER words, REPEATS)."
+                await update.message.reply_text(msg)
+            except Exception as exc:
+                await update.message.reply_text(safe_error(exc, self.cfg))
+            return
+
     async def notify(self, job, text):
         if not job["chat"]:
             return
@@ -510,6 +589,10 @@ class Controller:
     async def start(self, app):
         self.app = app
         await app.bot.set_my_commands([BotCommand("start", "Open your clip studio"),
+                                      BotCommand("hook", "Score a YouTube hook & classify formula"),
+                                      BotCommand("ytlint", "Lint title & thumbnail packaging"),
+                                      BotCommand("chapters", "Generate YouTube chapters for a job"),
+                                      BotCommand("deadair", "Edit decision list (dead air & fillers)"),
                                       BotCommand("xpost", "Research an X post by category and keywords"),
                                       BotCommand("xjobs", "Recent X research and publishing states"),
                                       BotCommand("speedclip", "IShowSpeed clips in English, 6–60 seconds"),
@@ -554,6 +637,7 @@ class Controller:
         app = (Application.builder().token(self.cfg.token).post_init(self.start).post_stop(self.stop)
                .concurrent_updates(4).read_timeout(60).write_timeout(180).connect_timeout(30).build())
         app.add_handler(CommandHandler("whoami", self.whoami))
+        app.add_handler(CommandHandler(["hook", "hookscore", "ytlint", "lint", "chapters", "deadair"], self.yt_agent_command))
         app.add_handler(CommandHandler(["xpost", "xjobs"], self.x_command))
         app.add_handler(CommandHandler(["clip", "geminiclip", "speedclip"], self.submit))
         app.add_handler(CommandHandler(["start", "help", "jobs", "settings", "provider", "clips", "length", "style",

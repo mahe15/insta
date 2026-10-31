@@ -10,6 +10,19 @@ def layout(prefs, face=None, force_fit=False):
     w, h = prefs.width, prefs.width * 16 // 9
     fit = force_fit or prefs.reframe == "blur" or bool(prefs.preserve_wide_groups and (
         face.get("square_mode") == "fit" or face.get("height", 0) > face.get("width", 0)))
+    if prefs.layout == "four_three_hook":
+        cw = w
+        ch = round(w * 3 / 4 / 2) * 2
+        x, y = 0, (h - ch) // 2
+        if fit:
+            sw, sh = face.get("width", w), face.get("height", ch)
+            ratio = min(w / max(1, sw), ch / max(1, sh))
+            cw, ch = max(2, round(sw * ratio / 2) * 2), max(2, round(sh * ratio / 2) * 2)
+            x, y = (w - cw) // 2, y + (round(w * 3 / 4 / 2) * 2 - ch) // 2
+        return {"width": w, "height": h, "fit": fit,
+                "video_x": x, "video_y": y, "video_width": cw, "video_height": ch,
+                "hook_bottom": max(0, y - round(w * .025)),
+                "caption_bottom": min(y + ch - round(w * .055), round(h * .82))}
     x, y, cw, ch = 0, (h - w) // 2, w, w
     if prefs.layout == "square_hook" and fit:
         sw, sh = face.get("width", w), face.get("height", w)

@@ -1,0 +1,14 @@
+{
+  "passed": true,
+  "errors": [],
+  "warnings": [
+    "All slides share one environment; vary framing/action deliberately"
+  ],
+  "words_per_slide": [
+    2,
+    2,
+    2,
+    2
+  ],
+  "method": "local text/structure checks"
+}

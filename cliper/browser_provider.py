@@ -74,7 +74,18 @@ async def dismiss_popups(page):
         'button:has-text("Got it")',
         'button:has-text("Maybe later")',
         'button:has-text("Close")',
+        'button:has-text("Accept all")',
+        'button:has-text("Accept")',
+        'button:has-text("Continue")',
+        'button:has-text("OK")',
+        'button:has-text("Not now")',
+        'button:has-text("Don\'t show again")',
         '[data-testid="close-button"]',
+        '[data-testid="dialog-close-button"]',
+        'button[aria-label="Close"]',
+        '[role="dialog"] button:has-text("Close")',
+        '[role="dialog"] button:has-text("Dismiss")',
+        '[role="dialog"] button[aria-label*="close" i]',
     ]
     for sel in selectors:
         try:
@@ -256,6 +267,55 @@ def parse_result(raw: str, request_id: str, result_type):
 
 
 
+STEALTH_SCRIPT = """
+(() => {
+    try {
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    } catch (e) {}
+
+    try {
+        if (!window.chrome) {
+            window.chrome = {};
+        }
+        if (!window.chrome.runtime) {
+            window.chrome.runtime = {};
+        }
+        if (!window.chrome.loadTimes) {
+            window.chrome.loadTimes = function() {};
+        }
+        if (!window.chrome.csi) {
+            window.chrome.csi = function() {};
+        }
+        if (!window.chrome.app) {
+            window.chrome.app = {};
+        }
+    } catch (e) {}
+
+    try {
+        if (navigator.plugins && navigator.plugins.length === 0) {
+            const fakePlugins = [
+                { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+                { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
+                { name: 'Native Client', filename: 'internal-nacl-plugin', description: '' }
+            ];
+            Object.defineProperty(navigator, 'plugins', { get: () => fakePlugins });
+        }
+    } catch (e) {}
+
+    try {
+        if (window.navigator.permissions && window.navigator.permissions.query) {
+            const origQuery = window.navigator.permissions.query;
+            window.navigator.permissions.query = (params) => (
+                params && params.name === 'notifications'
+                    ? Promise.resolve({ state: Notification.permission })
+                    : origQuery(params)
+            );
+        }
+    } catch (e) {}
+})();
+"""
+
+
 class BrowserEditorialClient:
     def __init__(self, cfg: Config):
         self.cfg = cfg
@@ -263,6 +323,7 @@ class BrowserEditorialClient:
         self.lock = FileLock(str(self.profile.with_suffix(".lock")), timeout=0)
         self.playwright = None
         self.context = None
+        self.browser_cdp = None
         self.request_lock = asyncio.Lock()
         self.accept_downloads = False
         self.last_web_links: list[str] = []
@@ -285,13 +346,47 @@ class BrowserEditorialClient:
             raise BrowserBusyError("The AI browser is busy. Finish or close its login session first.") from None
         try:
             self.playwright = await async_playwright().start()
-            self.context = await self.playwright.chromium.launch_persistent_context(
-                user_data_dir=str(self.profile), headless=self.cfg.browser_headless,
-                viewport={"width": 1280, "height": 900}, accept_downloads=self.accept_downloads,
-                locale="en-US", timeout=30000,
-                ignore_default_args=["--enable-automation"],
-                # Some local networks fail Google's QUIC transport; use normal HTTPS over TCP.
-                args=["--disable-quic", "--disable-blink-features=AutomationControlled"])
+            cdp_url = os.getenv("CLIPER_BROWSER_CDP_URL", "").strip()
+            if cdp_url:
+                self.browser_cdp = await self.playwright.chromium.connect_over_cdp(cdp_url)
+                self.context = self.browser_cdp.contexts[0] if self.browser_cdp.contexts else await self.browser_cdp.new_context()
+            else:
+                launch_opts = {
+                    "user_data_dir": str(self.profile),
+                    "headless": self.cfg.browser_headless,
+                    "viewport": {"width": 1280, "height": 900},
+                    "accept_downloads": self.accept_downloads,
+                    "locale": "en-US",
+                    "timeout": 30000,
+                    "ignore_default_args": ["--enable-automation"],
+                    "args": [
+                        "--disable-quic",
+                        "--disable-blink-features=AutomationControlled",
+                        "--disable-infobars",
+                        "--no-sandbox",
+                    ],
+                }
+                from pathlib import Path
+                chrome_installed = (
+                    Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe").exists()
+                    or Path(r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe").exists()
+                )
+                edge_installed = Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe").exists()
+                channel = "chrome" if chrome_installed else ("msedge" if edge_installed else None)
+                if channel:
+                    try:
+                        self.context = await self.playwright.chromium.launch_persistent_context(
+                            **launch_opts, channel=channel
+                        )
+                    except Exception:
+                        self.context = await self.playwright.chromium.launch_persistent_context(**launch_opts)
+                else:
+                    self.context = await self.playwright.chromium.launch_persistent_context(**launch_opts)
+
+            try:
+                await self.context.add_init_script(STEALTH_SCRIPT)
+            except Exception:
+                pass
             self.context.set_default_timeout(15000)
             return self
         except BaseException:
@@ -300,7 +395,9 @@ class BrowserEditorialClient:
 
     async def __aexit__(self, *exc):
         try:
-            if self.context:
+            if self.browser_cdp:
+                await self.browser_cdp.close()
+            elif self.context:
                 await self.context.close()
         except Exception:
             pass
@@ -402,9 +499,13 @@ class BrowserEditorialClient:
         from playwright.async_api import Error as PlaywrightError
         page = await self.context.new_page()
         try:
-            await page.goto(URL, wait_until="domcontentloaded", timeout=45000)
+            await page.goto(URL, wait_until="domcontentloaded", timeout=60000)
             await dismiss_popups(page)
-            await page.locator(COMPOSER).first.wait_for(state="visible", timeout=30000)
+            try:
+                await page.locator(COMPOSER).first.wait_for(state="visible", timeout=20000)
+            except PlaywrightError:
+                await dismiss_popups(page)
+                await page.locator(COMPOSER).first.wait_for(state="visible", timeout=25000)
             await self.ready(page)
             before = await page.locator(ASSISTANT).count()
             composer = page.locator(COMPOSER).first
@@ -433,7 +534,8 @@ class BrowserEditorialClient:
             ]))[:40]
             return raw
         except PlaywrightError as exc:
-            log.warning("Playwright error during ChatGPT exchange: %s", type(exc).__name__)
+            err_summary = str(exc).splitlines()[0] if str(exc) else ""
+            log.warning("Playwright error during ChatGPT exchange: %s (%s)", type(exc).__name__, err_summary)
             # Playwright's original call log can contain the prompt; keep it out of logs/Telegram.
             raise BrowserProviderError(
                 "Could not operate ChatGPT's website. Check the browser login, connection and UI. "
@@ -468,7 +570,14 @@ class BrowserEditorialClient:
             observed_links = []
             for attempt in range(2):
                 self.last_web_links = []
-                raw = await self.exchange(payload)
+                try:
+                    raw = await self.exchange(payload)
+                except BrowserProviderError as exc:
+                    if attempt == 0:
+                        log.warning("Attempt 0 browser exchange failed (%s); retrying in 3s...", exc)
+                        await asyncio.sleep(3)
+                        continue
+                    raise
                 observed_links.extend(self.last_web_links)
                 self.last_web_links = list(dict.fromkeys(observed_links))[:80]
                 try:

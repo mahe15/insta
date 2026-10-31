@@ -1,0 +1,57 @@
+{
+  "topic": "Discipline",
+  "pillar": "Mindset",
+  "hook": "Do hard things",
+  "caption": "Action creates clarity.",
+  "hashtags": [
+    "discipline"
+  ],
+  "slides": [
+    {
+      "text": "Slide 0",
+      "environment": "Room",
+      "action": "Character writes",
+      "lighting": "Moody",
+      "camera": "Close up",
+      "mood": "Serious",
+      "image_prompt": "A cinematic portrait of the original character reading",
+      "top_scene": null,
+      "bottom_scene": null
+    },
+    {
+      "text": "Slide 1",
+      "environment": "Room",
+      "action": "Character writes",
+      "lighting": "Moody",
+      "camera": "Close up",
+      "mood": "Serious",
+      "image_prompt": "A cinematic portrait of the original character reading",
+      "top_scene": null,
+      "bottom_scene": null
+    },
+    {
+      "text": "Slide 2",
+      "environment": "Room",
+      "action": "Character writes",
+      "lighting": "Moody",
+      "camera": "Close up",
+      "mood": "Serious",
+      "image_prompt": "A cinematic portrait of the original character reading",
+      "top_scene": null,
+      "bottom_scene": null
+    },
+    {
+      "text": "Slide 3",
+      "environment": "Room",
+      "action": "Character writes",
+      "lighting": "Moody",
+      "camera": "Close up",
+      "mood": "Serious",
+      "image_prompt": "A cinematic portrait of the original character reading",
+      "top_scene": null,
+      "bottom_scene": null
+    }
+  ],
+  "calculations": [],
+  "sources": []
+}

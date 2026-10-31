@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 
 from filelock import FileLock
 
-from .browser_provider import BrowserEditorialClient, BrowserProviderError
+from .browser_provider import BrowserEditorialClient, BrowserProviderError, dismiss_popups
 from .carousel import inspect_image
 from .carousel_models import ImageReview
 
@@ -45,6 +45,7 @@ class GeminiImages(BrowserEditorialClient):
         stage = "navigation"
         try:
             await page.goto(URL, wait_until="domcontentloaded", timeout=45000)
+            await dismiss_popups(page)
             stage = "composer/login"
             composer = page.locator(os.getenv("GEMINI_COMPOSER_SELECTOR", COMPOSER)).first
             await composer.wait_for(state="visible", timeout=30000)
@@ -57,46 +58,65 @@ class GeminiImages(BrowserEditorialClient):
             for path in paths:
                 inspect_image(path)
 
-            inputs = page.locator('input[type="file"]')
             stage = "file attachment"
-            if await inputs.count():
-                await inputs.first.set_input_files([str(p.resolve()) for p in paths])
-                return page, composer
-
-            upload_btn = page.locator(
-                'button[aria-label="Upload & tools"]:visible, '
-                'button[aria-label*="Upload" i]:visible, '
-                '[data-test-id*="upload" i]:visible'
-            ).first
-            stage = "upload menu"
-            await upload_btn.wait_for(state="visible", timeout=20000)
-
-            menu_item = page.locator(
-                '[data-test-id="local-images-files-uploader-button"], '
-                '[role="menuitem"][aria-label*="Upload files" i], '
-                '[role="menuitem"]:has-text("Upload files")'
-            ).first
-
-            for _attempt in range(5):
-                await upload_btn.click()
-                try:
-                    await menu_item.wait_for(state="visible", timeout=3000)
+            target_input = None
+            for _ in range(10):
+                inputs = page.locator('input[type="file"][accept*="image"], input[type="file"]')
+                if await inputs.count():
+                    image_inputs = page.locator('input[type="file"][accept*="image"]')
+                    target_input = image_inputs.first if await image_inputs.count() else inputs.first
                     break
-                except Exception:
-                    await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
 
-            async with page.expect_file_chooser(timeout=10000) as chooser_info:
-                await menu_item.click()
-            chooser = await chooser_info.value
-            await chooser.set_files([str(p.resolve()) for p in paths])
+            if target_input:
+                await target_input.set_input_files([str(p.resolve()) for p in paths])
+            else:
+                upload_btn = page.locator(
+                    'button[aria-label="Upload & tools"]:visible, '
+                    'button[aria-label*="Upload" i]:visible, '
+                    '[data-test-id*="upload" i]:visible, '
+                    'button[aria-label*="Attach" i]:visible'
+                ).first
+                stage = "upload menu"
+                await upload_btn.wait_for(state="visible", timeout=15000)
+
+                menu_item = page.locator(
+                    '[data-test-id="local-images-files-uploader-button"], '
+                    '[role="menuitem"][aria-label*="Upload files" i], '
+                    '[role="menuitem"]:has-text("Upload files"), '
+                    '[role="menuitem"]:has-text("Upload")'
+                ).first
+
+                for _attempt in range(3):
+                    await upload_btn.click()
+                    try:
+                        await menu_item.wait_for(state="visible", timeout=2000)
+                        break
+                    except Exception:
+                        await asyncio.sleep(0.5)
+
+                if await menu_item.is_visible():
+                    async with page.expect_file_chooser(timeout=10000) as chooser_info:
+                        await menu_item.click()
+                    chooser = await chooser_info.value
+                    await chooser.set_files([str(p.resolve()) for p in paths])
+                else:
+                    new_inputs = page.locator('input[type="file"][accept*="image"], input[type="file"]')
+                    if await new_inputs.count():
+                        await new_inputs.first.set_input_files([str(p.resolve()) for p in paths])
+                    else:
+                        raise BrowserProviderError("Could not locate Gemini image upload input or menu item")
 
             # Wait for thumbnail to appear in composer
-            for _ in range(20):
+            stage = "attachment thumbnail"
+            thumb = page.locator(
+                'uploader-file-preview, .file-preview-chip, .file-preview-container, '
+                'img.gem-attachment-style-img, img[src*="blob:"], uploader-file-card, '
+                '[data-test-id*="file" i], img[class*="attachment"]'
+            ).first
+            for _ in range(10):
                 await asyncio.sleep(0.5)
-                thumb = page.locator(
-                    'uploader-file-card, [data-test-id*="file" i], img[class*="attachment"], img[src*="blob:"]'
-                ).first
-                if await thumb.is_visible():
+                if await thumb.is_visible() or await page.locator('.with-file-preview').count() > 0:
                     break
 
             return page, composer

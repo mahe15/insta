@@ -209,6 +209,21 @@ export default function Settings() {
                     {draft.layout === "square_hook" && <Check size={16} />}
                   </button>
                   <button
+                    className={draft.layout === "four_three_hook" ? "selected" : ""}
+                    onClick={() => set("layout", "four_three_hook")}
+                  >
+                    <div className="layout-diagram four-three">
+                      <i />
+                      <b />
+                      <span />
+                    </div>
+                    <div>
+                      <strong>4:3 + hook</strong>
+                      <small>4:3 video on a 9:16 canvas (Fast Cut)</small>
+                    </div>
+                    {draft.layout === "four_three_hook" && <Check size={16} />}
+                  </button>
+                  <button
                     className={draft.layout === "legacy" ? "selected" : ""}
                     onClick={() => set("layout", "legacy")}
                   >
@@ -223,6 +238,41 @@ export default function Settings() {
                     {draft.layout === "legacy" && <Check size={16} />}
                   </button>
                 </div>
+              </section>
+              <section className="settings-section">
+                <SectionTitle
+                  title="Fast Cut defaults"
+                  note="Sequential video slicing into fixed-duration parts with Part header labels."
+                />
+                {toggle(
+                  "fast_cut",
+                  "Enable Fast Cut mode by default",
+                  "Bypasses AI discovery to slice full video into sequential numbered parts.",
+                )}
+                {draft.fast_cut && (
+                  <>
+                    <div className="form-grid">
+                      {number(
+                        "fast_cut_duration",
+                        "Part duration (seconds)",
+                        10,
+                        600,
+                        "Length of each sequential clip (default: 90 seconds).",
+                      )}
+                    </div>
+                    {toggle(
+                      "fast_cut_skip_intro",
+                      "Skip first 3 min",
+                      "When enabled, skips the first 180 seconds (3 minutes) before cutting parts.",
+                    )}
+                  </>
+                )}
+              </section>
+              <section className="settings-section">
+                <SectionTitle
+                  title="Video rendering & resolution"
+                  note="Canvas sizing and framing parameters."
+                />
                 <div className="form-grid">
                   {select("width", "Export resolution", [
                     [1080, "1080 × 1920 · Full HD"],

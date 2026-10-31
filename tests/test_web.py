@@ -110,6 +110,36 @@ def test_project_rules_link_speed_upload_and_publish(web, transcript, clip):
     assert "Follow along." in caption and "#done" in caption
 
 
+def test_project_captions_toggle_and_persistence(web):
+    client, store, _ = web
+    payload = {"captions": False, "style": "bold"}
+    
+    # 1. New project from link (/api/jobs)
+    res_link = client.post("/api/jobs", json={"source": "https://youtu.be/abcdefghij1", "preferences": payload})
+    assert res_link.status_code == 201
+    prefs_link = json.loads(store.get(res_link.json()["id"])["prefs"])
+    assert prefs_link["captions"] is False
+    assert prefs_link["style"] == "bold"
+
+    # 2. Speed studio job (/api/speed/jobs)
+    res_speed = client.post("/api/speed/jobs", json={"source": "https://youtu.be/abcdefghij2", "preferences": payload})
+    assert res_speed.status_code == 201
+    prefs_speed = json.loads(store.get(res_speed.json()["id"])["prefs"])
+    assert prefs_speed["captions"] is False
+    assert prefs_speed["style"] == "bold"
+
+    # 3. File upload job (/api/jobs/upload)
+    res_upload = client.post(
+        "/api/jobs/upload",
+        files={"file": ("raw_video.mp4", b"fixture-video-content", "video/mp4")},
+        data={"preferences": json.dumps(payload)},
+    )
+    assert res_upload.status_code == 201
+    prefs_upload = json.loads(store.get(res_upload.json()["id"])["prefs"])
+    assert prefs_upload["captions"] is False
+    assert prefs_upload["style"] == "bold"
+
+
 def test_ownership_and_transcript_filtering(web, transcript, clip):
     client, store, _ = web
     identity = ready_job(store, transcript, clip)

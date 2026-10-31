@@ -1,0 +1,13 @@
+{
+  "fingerprint": "2f65862319f46b94732e97eda4916584d89c29420923e05e5f97f018e4bdec8a",
+  "visual": {
+    "status": "skipped",
+    "method": "QA disabled (auto-approved)"
+  },
+  "technical": {
+    "width": 1080,
+    "height": 1350,
+    "luma_std": 8.34,
+    "upscale_needed": false
+  }
+}

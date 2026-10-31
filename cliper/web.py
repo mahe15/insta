@@ -329,13 +329,15 @@ def create_app(cfg: Config | None = None, *, start_engine=True, token=None, proj
         return [job_data(j) for j in rows("jobs")]
 
     def create_job(source, overrides):
+        if overrides.get("fast_cut") and "layout" not in overrides:
+            overrides = dict(overrides) | {"layout": "four_three_hook"}
         prefs = Preferences.model_validate(store.prefs(owner).model_dump() | overrides)
         if not prefs.f1_enabled:
             raise ValueError("Enable clipping in Settings before creating a project")
-        if prefs.clipping_mode == "audio_first":
+        if prefs.clipping_mode == "audio_first" and not prefs.fast_cut:
             cfg.check_ai(prefs.ai_provider, prefs.ai_model)
         cfg.check_disk()
-        if prefs.clipping_mode == "gemini_browser":
+        if prefs.clipping_mode == "gemini_browser" and not prefs.fast_cut:
             from .gemini_clipping import youtube_url
             source = youtube_url(source)
         else:
@@ -398,10 +400,13 @@ def create_app(cfg: Config | None = None, *, start_engine=True, token=None, proj
             raise ValueError("Upload preferences must be valid JSON")
         if not isinstance(overrides, dict):
             raise ValueError("Upload preferences must be an object")
+        if overrides.get("fast_cut") and "layout" not in overrides:
+            overrides = dict(overrides) | {"layout": "four_three_hook"}
         prefs = Preferences.model_validate(store.prefs(owner).model_dump() | overrides | {"clipping_mode": "audio_first"})
         if not prefs.f1_enabled:
             raise ValueError("Enable clipping first")
-        cfg.check_ai(prefs.ai_provider, prefs.ai_model)
+        if not prefs.fast_cut:
+            cfg.check_ai(prefs.ai_provider, prefs.ai_model)
         job = store.create(owner, 0, "web-upload", cfg.snapshot_ai(prefs), cfg.max_active_jobs, state="uploading")
         target = store.directory(job["id"]) / ("uploaded-source" + suffix)
         try:
@@ -1457,6 +1462,8 @@ def create_app(cfg: Config | None = None, *, start_engine=True, token=None, proj
 
     from .x_web import install_routes
     install_routes(app, cfg, store, owner, save_upload)
+    from .youtube_agent_web import install_routes as install_yt_routes
+    install_yt_routes(app, cfg, store, owner)
     dist = Path(static_root) if static_root else root / "frontend" / "dist"
     if dist.is_dir():
         app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")

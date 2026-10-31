@@ -1,0 +1,13 @@
+{
+  "fingerprint": "f056bd73ea69e380604829dcd6a48f48b9ec849d6ca35fdbcfe47354833b7480",
+  "visual": {
+    "status": "skipped",
+    "method": "manual review required"
+  },
+  "technical": {
+    "width": 1080,
+    "height": 1350,
+    "luma_std": 36.08,
+    "upscale_needed": false
+  }
+}

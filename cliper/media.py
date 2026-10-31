@@ -113,7 +113,19 @@ def filter_graph(prefs: Preferences, face: dict, subtitle: str, force_blur=False
     w, h = prefs.width, prefs.width * 16 // 9
     mode = prefs.reframe
     geometry = layout(prefs, face, force_blur)
-    if prefs.layout == "square_hook":
+    if prefs.layout == "four_three_hook":
+        mode = "four_three_hook"
+        ch = round(w * 3 / 4 / 2) * 2
+        y_pad = (h - ch) // 2
+        if geometry["fit"]:
+            graph = (f"[0:v]scale={w}:{ch}:force_original_aspect_ratio=decrease:force_divisible_by=2,"
+                     f"pad={w}:{ch}:(ow-iw)/2:(oh-ih)/2:color=black,")
+        else:
+            expression = center_expression(face.get("centers", [])) if prefs.smart_crop else "0.5"
+            graph = (f"[0:v]scale={w}:{ch}:force_original_aspect_ratio=increase,crop={w}:{ch}:"
+                     f"x='max(0,min(iw-ow,iw*({expression})-ow/2))':y=(ih-oh)/2,")
+        graph += f"pad={w}:{h}:0:{y_pad}:color=black[framed];"
+    elif prefs.layout == "square_hook":
         mode = "square_hook"
         if geometry["fit"]:
             graph = (f"[0:v]scale={w}:{w}:force_original_aspect_ratio=decrease:force_divisible_by=2,"
@@ -125,7 +137,7 @@ def filter_graph(prefs: Preferences, face: dict, subtitle: str, force_blur=False
         graph += f"pad={w}:{h}:0:{(h - w) // 2}:color=black[framed];"
     elif force_blur or (mode == "auto" and not face.get("safe_crop")):
         mode = "blur"
-    if mode == "square_hook":
+    if mode in ("square_hook", "four_three_hook"):
         pass
     elif mode == "blur":
         graph = (f"[0:v]split=2[bg][fg];[bg]scale={w}:{h}:force_original_aspect_ratio=increase,"
@@ -156,7 +168,7 @@ def filter_graph(prefs: Preferences, face: dict, subtitle: str, force_blur=False
     graph = "[0:v]" + ",".join(filters) + "[graded];" + graph.replace("[0:v]", "[graded]")
     graph = graph.replace(":force_original_aspect_ratio=", ":flags=lanczos:force_original_aspect_ratio=")
     graph += f"[framed]setsar=1,fps={prefs.fps}"
-    if prefs.captions or prefs.layout == "square_hook" or prefs.overlay_text:
+    if prefs.captions or prefs.layout in ("square_hook", "four_three_hook") or prefs.overlay_text:
         # Subtitle filename is generated internally, and cwd avoids Windows drive/path escaping.
         graph += f",ass=filename={subtitle}"
     graph += "[out]"
@@ -182,7 +194,7 @@ async def quality_check(path: Path, clip: Clip, prefs: Preferences, cfg: Config,
     if float(match[1]) < -55:
         raise ValueError("Output audio is effectively silent")
     from .quality import visual_report
-    visual = await asyncio.to_thread(visual_report, path, square=prefs.layout == "square_hook")
+    visual = await asyncio.to_thread(visual_report, path, square=prefs.layout == "square_hook", aspect_4_3=prefs.layout == "four_three_hook")
     if visual["black_fraction"] >= .98:
         raise ValueError("Output video content is effectively black")
     return info | {"bytes": path.stat().st_size, "full_decode": "passed", "audio_level": "passed",

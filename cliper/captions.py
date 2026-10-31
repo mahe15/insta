@@ -82,10 +82,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     if prefs.overlay_text:
         # Branding stays separate from speech and is visible even when subtitles are off.
         lines, size = fit_text(safe_ass(prefs.overlay_text), width * .82, round(width * .034), round(width * .022), 2)
-        y = min(round(height * .90), geometry['video_y'] + geometry['video_height'] + round(width * .05)) if prefs.layout == "square_hook" else round(height * .87)
+        y = min(round(height * .90), geometry['video_y'] + geometry['video_height'] + round(width * .05)) if prefs.layout in ("square_hook", "four_three_hook") else round(height * .87)
         events.append(f"Dialogue: 2,0:00:00.00,{ass_time(clip.end - clip.start)},Default,,0,0,0,,"
                       + f"{{\\an8\\q2\\pos({width // 2},{y})\\fs{size}\\1c&H00FFFFFF&}}" + r"\N".join(lines))
-    if prefs.layout == "square_hook":
+    if prefs.layout in ("square_hook", "four_three_hook"):
         title_lines, title_size = fit_text(safe_ass(clip.title), width * .86, round(width * .056), round(width * .028), 3)
         title = r"\N".join(title_lines)
         events.append(f"Dialogue: 1,0:00:00.00,{ass_time(clip.end - clip.start)},Default,,0,0,0,,"

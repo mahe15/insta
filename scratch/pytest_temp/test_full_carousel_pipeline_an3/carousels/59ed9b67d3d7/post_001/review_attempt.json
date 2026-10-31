@@ -1,0 +1,15 @@
+{
+  "approved": false,
+  "score": {
+    "hook": 70,
+    "share": 70,
+    "save": 70,
+    "emotion": 70,
+    "novelty": 70,
+    "audience": 70,
+    "brand": 70
+  },
+  "issues": [
+    "Weak payoff"
+  ]
+}

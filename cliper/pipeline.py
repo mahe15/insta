@@ -39,6 +39,8 @@ class Pipeline:
         cache = directory / "analysis.json"
         if cache.exists():
             return Analysis.model_validate_json(cache.read_text(encoding="utf-8"))
+        if prefs.fast_cut:
+            return await self.analyze_fast_cut(source_input, directory, prefs, progress, cancelled)
         if prefs.clipping_mode == "gemini_browser":
             from .gemini_clipping import analyze
             try:
@@ -97,17 +99,78 @@ class Pipeline:
         write_json(cache, analysis.model_dump())
         return analysis
 
+    async def analyze_fast_cut(self, source_input: str, directory: Path, prefs: Preferences,
+                               progress: Callable[[str], Awaitable[None]], cancelled=lambda: False) -> Analysis:
+        from .fast_cut import generate_fast_cut_clips
+        reference = directory / "source.json"
+        if source_input.startswith("https://"):
+            from . import remote_media
+            await progress("Inspecting video metadata · Fast Cut")
+            info = await remote_media.metadata(source_input, directory / "source-metadata", self.cfg, cancelled)
+            duration = float(info["duration"])
+            title = info.get("title", "Video")
+            write_json(reference, {"path": "", "media": info, "kind": "remote_index", "url": source_input})
+            transcript = None
+            if prefs.captions:
+                try:
+                    track = await remote_media.captions(source_input, directory / "captions", info, prefs.language, self.cfg, cancelled)
+                    if track:
+                        from .stream_scan import parse_vtt
+                        transcript = parse_vtt(track[0].read_text("utf-8-sig"), duration, track[1])
+                except Exception:
+                    transcript = None
+            if transcript is None:
+                transcript = Transcript(language=prefs.language if prefs.language != "auto" else "en",
+                                        duration=duration, segments=[])
+            write_json(directory / "transcript.json", transcript.model_dump())
+        else:
+            source = Path(source_input).resolve()
+            if not source.is_file():
+                raise ValueError("Source file does not exist")
+            await progress("Checking uploaded video duration · Fast Cut")
+            info = await media.probe(source, self.cfg, cancelled)
+            duration = float(info["duration"])
+            title = source.stem
+            write_json(reference, {"path": str(source), "media": info, "kind": "local"})
+            transcript_path = directory / "transcript.json"
+            if transcript_path.exists():
+                transcript = Transcript.model_validate_json(transcript_path.read_text("utf-8"))
+            elif prefs.captions and duration <= 300:
+                await progress("Transcribing speech with word timestamps")
+                transcript = await media.transcribe(source, directory, prefs, self.cfg, cancelled)
+            else:
+                transcript = Transcript(language="en", duration=duration, segments=[])
+                write_json(transcript_path, transcript.model_dump())
+
+        await progress(f"Slicing into {prefs.fast_cut_duration}s sequential parts · Fast Cut")
+        clips = generate_fast_cut_clips(
+            duration=duration,
+            chunk_duration=float(prefs.fast_cut_duration),
+            skip_intro=prefs.fast_cut_skip_intro,
+            skip_seconds=180.0
+        )
+        analysis = Analysis(
+            coverage={"fraction": 1.0, "source_seconds": duration, "analyzed_seconds": duration, "method": "fast_cut"},
+            title=title,
+            language=transcript.language,
+            duration=duration,
+            method="fast_cut",
+            clips=clips
+        )
+        write_json(directory / "analysis.json", analysis.model_dump())
+        return analysis
+
     async def render_one(self, directory: Path, clip: Clip, prefs: Preferences, cancelled=lambda: False):
         self.cfg.check_disk()
         reference = json.loads((directory / "source.json").read_text(encoding="utf-8"))
-        source = Path(reference["path"])
+        source = Path(reference["path"]) if reference.get("path") else None
         transcript = Transcript.model_validate_json((directory / "transcript.json").read_text(encoding="utf-8"))
         from .display_text import display_clip
         clip = display_clip(clip, prefs, transcript.language)
         from .project_rules import apply
         clip = apply(clip, prefs)
         verified_transcript = None
-        if reference.get("kind") == "remote_index" or (reference.get("kind") == "remote_gemini" and prefs.gemini_verify_captions):
+        if (reference.get("kind") == "remote_index" or (reference.get("kind") == "remote_gemini" and prefs.gemini_verify_captions)) and not prefs.fast_cut:
             from .gemini_clipping import verify_range
             source, verified_transcript = await verify_range(reference, directory, clip, prefs, self.cfg, cancelled)
         output = directory / "clips" / f"clip_{clip.id:02}.mp4"

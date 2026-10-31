@@ -31,6 +31,7 @@ export default function Speed() {
     [gain, setGain] = useState(0.12),
     [zoom, setZoom] = useState(true);
   const [music, setMusic] = useState(boot.preferences.music),
+    [captions, setCaptions] = useState(boot.preferences.captions ?? true),
     [render, setRender] = useState(false);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<Error | null>(null);
@@ -83,6 +84,7 @@ export default function Speed() {
           sfx_gain: gain,
           reaction_zoom: zoom,
           music,
+          captions,
           auto_render: render,
           ...rules,
         },
@@ -211,6 +213,12 @@ export default function Speed() {
               description="Category-matched tracks at 10% gain, lowered beneath speech."
               checked={music}
               onChange={setMusic}
+            />
+            <Switch
+              label="Burn in video captions"
+              description="Word-timed subtitles on rendered clips. Turn off for clean video without captions."
+              checked={captions}
+              onChange={setCaptions}
             />
             <Switch
               label="Render the shortlist automatically"

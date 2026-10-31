@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 
 
-def visual_report(path: Path, *, square=False):
+def visual_report(path: Path, *, square=False, aspect_4_3=False):
     cap = cv2.VideoCapture(str(path))
     fps = cap.get(cv2.CAP_PROP_FPS)
     duration = cap.get(cv2.CAP_PROP_FRAME_COUNT) / fps if fps else 0
@@ -25,7 +25,12 @@ def visual_report(path: Path, *, square=False):
             ok, frame = cap.read()
             if not ok:
                 raise ValueError(f"Output frame could not be decoded near {t:.1f}s")
-            if square:
+            if aspect_4_3:
+                h, w = frame.shape[:2]
+                vh = min(h, round(w * 3 / 4 / 2) * 2)
+                top = max(0, (h - vh) // 2)
+                frame = frame[top:top + vh]
+            elif square:
                 h, w = frame.shape[:2]
                 top = max(0, (h - w) // 2)
                 frame = frame[top:top + min(w, h)]

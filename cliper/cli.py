@@ -174,7 +174,8 @@ async def local(cfg: Config, args):
     store = Store(cfg.data_dir)
     prefs = cfg.snapshot_ai(Preferences(clips=args.clips, min_seconds=args.min_seconds, max_seconds=args.max_seconds,
                                        width=args.width, reframe=args.reframe, scan_minutes=args.scan_minutes,
-                                       focus_times=args.focus))
+                                       focus_times=args.focus,
+                                       captions=not getattr(args, "no_captions", False)))
     source = args.source if args.source.startswith("https://") else str(Path(args.source).resolve())
     job = store.create(0, 0, source, prefs, cfg.max_active_jobs)
     directory = store.directory(job["id"])
@@ -240,8 +241,46 @@ def main():
     process.add_argument("--max-seconds", type=int, default=60)
     process.add_argument("--width", type=int, choices=[720, 1080], default=1080)
     process.add_argument("--reframe", choices=["auto", "blur", "center"], default="auto")
+    process.add_argument("--no-captions", action="store_true", help="Disable burned-in subtitles on rendered clips")
     process.add_argument("--analyze-only", action="store_true")
     sub.add_parser("cleanup", help="Delete expired finished jobs, never source files supplied via CLI")
+
+    # YouTube Agent Skill Subcommands
+    hs_p = sub.add_parser("hookscore", help="Score a YouTube hook against 5 properties and classify into 21 formulas")
+    hs_p.add_argument("--hook", default=None, help="Hook line to score")
+    hs_p.add_argument("--file", type=Path, default=None, help="File containing hooks to rank (one per line)")
+    hs_p.add_argument("--json", action="store_true", help="Output machine-readable JSON")
+
+    pl_p = sub.add_parser("package-lint", help="Lint YouTube title & thumbnail synergy for mobile/desktop cuts & vagueness")
+    pl_p.add_argument("--title", default=None, help="Video title")
+    pl_p.add_argument("--thumb", default=None, help="Thumbnail text")
+    pl_p.add_argument("--file", type=Path, default=None, help="File with titles to lint")
+    pl_p.add_argument("--json", action="store_true", help="Output machine-readable JSON")
+
+    da_p = sub.add_parser("deadair", help="Generate an edit decision list (DEAD air, FILLER words, REPEAT restarts) from transcript")
+    da_p.add_argument("transcript", type=Path, help="Path to transcript (.srt, .vtt, or whisper .json)")
+    da_p.add_argument("--floor", type=float, default=0.45, help="Silence gap floor threshold in seconds")
+    da_p.add_argument("--json", action="store_true", help="Output machine-readable JSON")
+
+    ch_p = sub.add_parser("chapters", help="Generate YouTube-compliant chapters from transcript scored by topic shifts")
+    ch_p.add_argument("transcript", type=Path, help="Path to transcript (.srt, .vtt, or whisper .json)")
+    ch_p.add_argument("--target", type=int, default=7, help="Target number of chapters")
+    ch_p.add_argument("--json", action="store_true", help="Output machine-readable JSON")
+
+    rt_p = sub.add_parser("retention", help="Analyze YouTube Studio audience retention CSV (hook leak, cliffs, slide)")
+    rt_p.add_argument("csv_file", type=Path, help="Path to YouTube Studio retention export CSV")
+    rt_p.add_argument("--transcript", type=Path, default=None, help="Transcript to name words spoken at retention cliffs")
+    rt_p.add_argument("--duration", type=float, default=None, help="Video duration in seconds")
+    rt_p.add_argument("--json", action="store_true", help="Output machine-readable JSON")
+
+    sw_p = sub.add_parser("swipe", help="Rank collected niche videos by multiple over channel median and classify formulas")
+    sw_p.add_argument("collected", type=Path, help="Path to JSON file containing collected video records")
+    sw_p.add_argument("--min", type=float, default=1.5, help="Minimum multiple over channel median")
+    sw_p.add_argument("--json", action="store_true", help="Output machine-readable JSON")
+
+    vo_p = sub.add_parser("voice", help="View or print current creator voice profile")
+    vo_p.add_argument("--path", action="store_true", help="Show path to voice.md file")
+
     args = parser.parse_args()
     cfg = None
     try:
@@ -315,6 +354,158 @@ def main():
                 print("ChatGPT browser returned validated JSON. No API key or API request used.")
             asyncio.run(browser_check())
             return
+
+        if args.command == "hookscore":
+            from .youtube_agent import score_hook, score_hooks
+            hooks_to_score = []
+            if args.hook:
+                hooks_to_score = [args.hook]
+            elif args.file and args.file.is_file():
+                hooks_to_score = [line.strip() for line in args.file.read_text(encoding="utf-8").splitlines() if line.strip()]
+            else:
+                parser.exit(1, "Specify either --hook \"...\" or --file hooks.txt\n")
+
+            if len(hooks_to_score) == 1 and not args.file:
+                res = score_hook(hooks_to_score[0])
+                if args.json:
+                    print(json.dumps(res, indent=2))
+                else:
+                    print(f"\n  {res['hook']}")
+                    print(f"  {'-' * min(72, max(24, len(res['hook'])))}")
+                    for k, v in res["properties"].items():
+                        print(f"    {k:<12} {v:3d}  {'#' * (v // 5)}")
+                    print(f"    {'VERDICT':<12} {res['verdict']:3d}  [{res['band']}]")
+                    formula_str = res['formula'] + (f" ({res['formula_hits']} pattern(s) matched)" if res['formula_hits'] else " (no formula matched)")
+                    print(f"    formula      {formula_str}")
+                    print(f"    weakest      {res['weakest']} - {res['fix']}\n")
+            else:
+                scored = score_hooks(hooks_to_score)
+                if args.json:
+                    print(json.dumps(scored, indent=2))
+                else:
+                    print(f"\nRanked {len(scored)} hooks:\n")
+                    for s in scored:
+                        print(f"  [{s['verdict']:2d}/100 {s['band']:<8}] ({s['formula']:<18}) {s['hook'][:60]}")
+                        print(f"         weakest: {s['weakest']} ({s['fix']})")
+                    print()
+            return
+
+        if args.command == "package-lint":
+            from .youtube_agent import lint_title_and_thumb, lint_titles
+            if args.title:
+                res = lint_title_and_thumb(args.title, args.thumb)
+                if args.json:
+                    print(json.dumps(res, indent=2))
+                else:
+                    print(f'\n  "{res["title"]}"')
+                    print(f"  {res['chars']} chars   score {res['score']}/100  [{res['status']}]")
+                    if res.get("thumb"):
+                        print(f'  Thumbnail: "{res["thumb"]}"')
+                    print(f"  Desktop Search View: \"{res['desktop_preview']}\"")
+                    print(f"  Mobile Feed View:    \"{res['mobile_preview']}\"")
+                    for m in res["issues"]:
+                        print(f"    [x] {m['kind']:<12} {m['message']}")
+                    for g in res["good"]:
+                        print(f"    [ok]             {g}")
+                    print()
+            elif args.file and args.file.is_file():
+                titles = [l.strip() for l in args.file.read_text(encoding="utf-8").splitlines() if l.strip()]
+                results = lint_titles(titles, args.thumb)
+                if args.json:
+                    print(json.dumps(results, indent=2))
+                else:
+                    for r in results:
+                        print(f"  [{r['score']:3d}/100] {r['title'][:55]}")
+                        for i in r["issues"]:
+                            print(f"       [x] {i['kind']}: {i['message']}")
+            else:
+                parser.exit(1, "Specify --title \"...\" [--thumb \"...\"] or --file titles.txt\n")
+            return
+
+        if args.command == "deadair":
+            from .youtube_agent import detect_deadair
+            if not args.transcript.is_file():
+                parser.exit(1, f"Transcript file not found: {args.transcript}\n")
+            res = detect_deadair(args.transcript, floor=args.floor)
+            if args.json:
+                print(json.dumps(res, indent=2))
+            else:
+                print(f"\n  {args.transcript} | {res['duration']:.2f}s total | floor: {args.floor}s\n")
+                for c in res["cuts"]:
+                    print(f"    {c['kind']:<7} {c['start']:8.2f} -> {c['end']:8.2f}  ({c['duration']:5.2f}s)  {c['why']}")
+                print(f"\n  {len(res['cuts'])} cuts: {res['removed_seconds']:.2f}s removed -> {res['out_seconds']:.2f}s out ({res['percent_saved']:.1f}% shorter)\n")
+            return
+
+        if args.command == "chapters":
+            from .youtube_agent import generate_youtube_chapters
+            if not args.transcript.is_file():
+                parser.exit(1, f"Transcript file not found: {args.transcript}\n")
+            res = generate_youtube_chapters(args.transcript, target=args.target)
+            if args.json:
+                print(json.dumps(res, indent=2))
+            else:
+                print(f"\n  YouTube Chapters ({len(res['chapters'])} sections) - {'VALID' if res['valid'] else 'INVALID'}:\n")
+                for c in res["chapters"]:
+                    print(f"    {c['label']} {c['draft_title']} ({c['duration']:.1f}s)")
+                print(f"\n-- Paste Block --\n{res['formatted_text']}\n")
+            return
+
+        if args.command == "retention":
+            from .youtube_agent import parse_retention_csv
+            if not args.csv_file.is_file():
+                parser.exit(1, f"CSV file not found: {args.csv_file}\n")
+            transcript_cues = None
+            if args.transcript and args.transcript.is_file():
+                from .youtube_agent import parse_cues_from_text
+                transcript_cues = parse_cues_from_text(args.transcript.read_text(encoding="utf-8", errors="replace"))
+            res = parse_retention_csv(args.csv_file, transcript_cues=transcript_cues, duration=args.duration)
+            if args.json:
+                print(json.dumps(res, indent=2))
+            else:
+                if "error" in res:
+                    print(f"Error: {res['error']}")
+                else:
+                    print(f"\n  Retention Diagnostic ({res['points']} points): {res['start']}% -> {res['end']}%\n")
+                    print(f"  HOOK LEAK:   {res['hook_leak']:.1f}% lost in first 30s  [{res['hook_verdict'].upper()}]")
+                    print(f"  SLIDE RATE:  {res['slide_rate']:.3f}% bleed per unit across middle")
+                    print(f"  ADVICE:      {res['advice']}\n")
+                    print("  CLIFF DROPS:")
+                    for c in res["cliffs"]:
+                        spoken_str = f' - "{c.get("spoken","")}"' if c.get("spoken") else ""
+                        print(f"    -{c['lost']:4.1f}% at {c['label']:>7}{spoken_str}")
+                    print()
+            return
+
+        if args.command == "swipe":
+            from .youtube_agent import analyze_swipe_outliers
+            if not args.collected.is_file():
+                parser.exit(1, f"JSON file not found: {args.collected}\n")
+            data = json.loads(args.collected.read_text(encoding="utf-8"))
+            vids = data.get("videos", data if isinstance(data, list) else [])
+            res = analyze_swipe_outliers(vids, min_multiple=args.min)
+            if args.json:
+                print(json.dumps(res, indent=2))
+            else:
+                print(f"\n  Analyzed {res['total_analyzed']} videos across {res['channel_count']} channels (threshold: >={args.min}x)\n")
+                for o in res["outliers"][:25]:
+                    print(f"    {o['multiple']:5.2f}x  {o['views']:>9,} views (median {o['median']:>9,})  {o['channel'][:20]:<20} {o['title'][:45]}")
+                    print(f"            formula: {o['formula']}")
+                if res["top_formulas"]:
+                    print("\n  Winning formulas in outliers:")
+                    for f in res["top_formulas"]:
+                        print(f"    {f['count']:2d}x {f['formula']}")
+                print()
+            return
+
+        if args.command == "voice":
+            from .youtube_agent import get_voice_profile, CONFIG
+            vp = get_voice_profile()
+            if args.path:
+                print(str(CONFIG / "voice.md"))
+            else:
+                print(vp)
+            return
+
         # A single lock prevents competing workers, retention jobs and local CLI jobs sharing a store.
         with FileLock(str(cfg.data_dir / "worker.lock"), timeout=0):
             if args.command == "bot":

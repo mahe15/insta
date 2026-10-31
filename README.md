@@ -19,6 +19,8 @@
   - [7. Next-Gen Editing Pipeline (1080p @ 60fps, YuNet, NVENC)](#7-next-gen-editing-pipeline-1080p--60fps-yunet-nvenc)
   - [8. Curated 64-Track Music Library & Dynamic Speech Ducking](#8-curated-64-track-music-library--dynamic-speech-ducking)
   - [9. Unified AI Prompt Registry](#9-unified-ai-prompt-registry)
+  - [10. YouTube Agent Skill Suite (Jake Schincariol End-to-End)](#10-youtube-agent-skill-suite-jake-schincariol-end-to-end)
+  - [11. Fast Cut: Sequential Slicing & 4:3 Hook Framing](#11-fast-cut-sequential-slicing--43-hook-framing)
 - [Quick Start on Windows](#quick-start-on-windows)
   - [Hardware & Software Prerequisites](#hardware--software-prerequisites)
   - [Option A: Launch Web Studio (1-Click)](#option-a-launch-web-studio-1-click)
@@ -233,6 +235,66 @@
   - X Real-Time Research Prompt
   - X Post Drafting Prompt
   - Display Language & Romanization Rules
+
+### 10. YouTube Agent Skill Suite (Jake Schincariol End-to-End)
+
+CLIPER features a complete, native end-to-end implementation of [Jake Schincariol's YouTube Agent Skill Suite](https://github.com/Jakeschincariol/youtube-agent-skill), making your YouTube production pipeline 100% efficient across scripting, packaging, editing, and analytics:
+
+- **11 Modular Agent Skills Installed**:
+  - `yt-script`: Opening 15s script diagnostics with 21 proven hook formulas.
+  - `yt-package`: Title and thumbnail synergy linter with mobile feed cutoff simulator.
+  - `yt-edit`: Dead-air silence finder, filler word pruner, and repeat retake cutter.
+  - `yt-chapters`: YouTube-compliant timestamps (00:00 start, 3+ chapters, >=10s apart).
+  - `yt-retention`: YouTube Studio audience retention CSV diagnostic (Hook Leak, Cliffs, Slide Rate).
+  - `yt-viral`: Niche viral outlier ranker using own-channel median multiples.
+  - `yt-plan`, `yt-shorts`, `yt-seo`, `yt-comment`, `yt-audit`: End-to-end channel operations.
+  - Installed across all agent customization environments: `.agents/skills/`, `~/.claude/skills/`, and Antigravity Global Skills.
+- **Pure Python, Zero Extra Heavy Dependencies**: Built into `cliper.youtube_agent` using only Python standard library.
+- **Deep Editorial Integration**:
+  - In `cliper.editorial.choose_hook`, candidate hook titles are automatically scored against the 5 hook properties (*Specificity, Address, Stakes, Curiosity, Brevity*) and tested for formula matches.
+  - Hooks that hallucinate fabricated numbers not present in the video source are strictly rejected.
+- **Full Web Studio Interface (`/youtube-agent`)**:
+  - Interactive multi-tab UI for Hook Scoring (Single & Multi-Rank Mode), Packaging Quality Linter, Dead Air EDL generator, Chapter Creator, Retention Diagnostic, Viral Outlier Ranker, and Creator Voice Editor.
+- **CLI Subcommands**:
+  - `python -m cliper hookscore --hook "..."`
+  - `python -m cliper package-lint --title "..." --thumb "..."`
+  - `python -m cliper deadair --srt path/to/sub.srt`
+  - `python -m cliper chapters --srt path/to/sub.srt --target 6`
+  - `python -m cliper retention --csv path/to/retention.csv`
+  - `python -m cliper swipe --json path/to/videos.json --min 2.0`
+  - `python -m cliper voice --show` / `--edit`
+- **Telegram Bot Commands**:
+  - `/hook <sentence>`: Instant 5-property diagnosis, weakest link, and formula match.
+  - `/ytlint <Title | Thumb>`: Packaging synergy and mobile cutoff report.
+  - `/chapters <job_id>`: Ready-to-paste YouTube description chapter timestamps.
+  - `/deadair <job_id>`: Silence and filler edit decision list for finished video jobs.
+
+### 11. Fast Cut: Sequential Slicing & 4:3 Hook Framing
+
+Fast Cut is an ultra-fast, high-volume production mode designed for episodic long-form content, podcasts, documentaries, livestreams, and tutorials:
+
+- **Universal Input**: Accepts any video URL from any platform (YouTube, Twitch, TikTok, Vimeo, X/Twitter, etc.) or uploaded raw video files (MP4, MOV, MKV, WebM).
+- **Sequential Slicing into Parts**:
+  - Slices the video into sequential parts of configurable length (default **90 seconds**, customizable from 10s to 600s).
+  - For example, a 2-hour video is automatically split into Part 1 (0–90s), Part 2 (90–180s), Part 3 (180–270s) ... up to Part 80.
+  - Small trailing remainder clips under 5 seconds are smoothly absorbed into the final part to prevent awkward sub-second cuts.
+- **Top Header Framing ("Part 1", "Part 2", ...)**:
+  - Each clip is automatically titled and branded with prominent header text (`"Part 1"`, `"Part 2"`, etc.) rendered right above the video box.
+  - Positioned using standard ASS styling with bold styling and high-contrast outline for clear legibility on mobile feeds.
+- **"Skip first 3 min" Toggle**:
+  - Optional toggle (default: **OFF**) to bypass opening intros, title sequences, sponsorships, or stream countdowns.
+  - When enabled, cutting begins exactly at 3:00 (180s), making 3:00–4:30 "Part 1".
+- **4:3 Aspect Ratio Framing (`four_three_hook`)**:
+  - Crops and scales the video content into a 4:3 frame (1080×810) centered on a 9:16 vertical canvas (1080×1920) at $y=555$.
+  - The `"Part X"` header sits at $y=528$ (27px right above the video frame), leaving the bottom region free for dynamic Whisper word-level captions.
+- **Maximum Reuse & Efficiency**:
+  - Directly reuses CLIPER's existing `Pipeline`, `Store`, `media.py`, `edit_layout.py`, and `captions.py`.
+  - For remote videos, metadata and duration are extracted in ~2 seconds without downloading the full multi-gigabyte video.
+  - During rendering, `remote_media.section` downloads only the specific slice range needed for each part.
+  - Bypasses transcript verification to ensure visual-only moments, background tracks, or fast dialogue render without errors.
+- **Full Publishing & Scheduling Integration**:
+  - All Fast Cut parts appear in the interactive Web Studio Clip Editor.
+  - Directly compatible with YouTube Shorts scheduled publishing (e.g. staggering Part 1..N across days or hours) and Instagram Reels.
 
 ---
 
@@ -822,6 +884,8 @@ cliper/
 │   ├── x_browser.py              # X Web composer & publisher
 │   ├── x_content.py              # X news research & fact verification
 │   ├── x_studio.py               # X Studio state machine & scheduler
+│   ├── youtube_agent.py          # YouTube Agent core engine (6 tools, 21 formulas)
+│   ├── youtube_agent_web.py      # Authenticated YouTube Agent REST API
 │   └── youtube_publishing.py     # YouTube Data API v3 publisher & OAuth
 ├── frontend/                     # Modern React 19 + Vite Web Studio
 │   ├── src/
@@ -831,6 +895,7 @@ cliper/
 │   │   ├── Speed.tsx             # IShowSpeed dedicated web workflow
 │   │   ├── XStudio.tsx           # X news research & posting studio
 │   │   ├── Workspaces.tsx        # Publishing, Carousels, Music Library
+│   │   ├── YouTubeAgent.tsx      # YouTube Agent Web Studio (7 diagnostic tabs)
 │   │   ├── styles.css            # Dark-mode design system & animations
 │   │   └── types.ts              # TypeScript interfaces
 ├── config/                       # Configuration templates & account stores

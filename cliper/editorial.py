@@ -69,12 +69,23 @@ def hook_checks(title, source):
 
 
 def choose_hook(title, variants, source):
+    from .youtube_agent import score_hook
     candidates = list(dict.fromkeys(" ".join(x.split()) for x in [title, *variants] if x.strip()))
     if not candidates:
         candidates = [" ".join(source.split()[:9])]
-    ranked = sorted(candidates, key=lambda x: (
-        "title_numbers_not_in_source" in hook_checks(x, source), len(hook_checks(x, source)),
-        not 4 <= len(tokens(x)) <= 10, len(x) > 65))
+
+    def rank_key(x):
+        sh = score_hook(x)
+        return (
+            "title_numbers_not_in_source" in hook_checks(x, source),
+            len(hook_checks(x, source)),
+            -sh["verdict"],
+            not (sh.get("formula_hits", 0) > 0),
+            not 4 <= len(tokens(x)) <= 10,
+            len(x) > 65
+        )
+
+    ranked = sorted(candidates, key=rank_key)
     best = ranked[0]
     if "title_numbers_not_in_source" in hook_checks(best, source):
         best = " ".join(source.split()[:9])[:90]
@@ -91,6 +102,7 @@ def boundaries(segments, start, end, prefs: Preferences):
 
 
 def attention_report(segments, start, end, title):
+    from .youtube_agent import score_hook
     text = " ".join(s.text for s in segments)
     words = sorted((w for s in segments for w in s.words if w.end > start and w.start < end), key=lambda w: w.start)
     length = max(.01, end - start)
@@ -100,6 +112,7 @@ def attention_report(segments, start, end, title):
     tail = max(0, end - words[-1].end) if words else 0
     wpm = len(tokens(text)) * 60 / length
     flags = hook_checks(title, text)
+    sh = score_hook(title)
     if lead > .8:
         flags.append("late_first_word")
     if tail > 1.2:
@@ -122,6 +135,11 @@ def attention_report(segments, start, end, title):
         flags.append("ending_needs_editorial_review")
     return {"version": VERSION, "words_per_minute": round(wpm, 1), "first_word_delay": round(lead, 2),
             "trailing_gap": round(tail, 2), "pauses": pauses, "flags": flags,
+            "hook_score": sh.get("verdict", 0),
+            "hook_band": sh.get("band", "WEAK"),
+            "hook_formula": sh.get("formula", "Unclassified"),
+            "hook_weakest": sh.get("weakest", ""),
             "low_confidence_word_fraction": round(low_confidence, 3) if known else None,
             "automatic_ready": not any(f in flags for f in ("title_numbers_not_in_source", "empty_title",
                 "repeated_phrase_check_transcript", "low_transcription_confidence")), "note": "Local heuristics; not a prediction of reach or retention."}
+

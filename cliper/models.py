@@ -75,7 +75,10 @@ class Preferences(Model):
     color_grade: Literal["off", "natural", "vivid"] = "natural"
     export_quality: Literal["high", "compact"] = "high"
     auto_render: bool = False
-    layout: Literal["square_hook", "legacy"] = "square_hook"
+    layout: Literal["square_hook", "four_three_hook", "legacy"] = "square_hook"
+    fast_cut: bool = False
+    fast_cut_duration: int = Field(default=90, ge=10, le=600)
+    fast_cut_skip_intro: bool = False
     music: bool = True
     music_ducking: bool = True
     music_override: str | None = Field(default=None, description="Force all clips to use this music category (e.g. 'phonk')")
